@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#4F6EF7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>哲恒排班登记</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="icons/icon-512.png">
+  <link rel="apple-touch-icon" href="icons/icon-512.png">
+</head>
+<body>
+
+  <!-- ==================== 顶部标题栏 ==================== -->
+  <header class="app-header">
+    <div class="header-left">
+      <h1 id="appTitle">哲恒 排班登记</h1>
+      <p class="header-date" id="headerDate">加载中…</p>
+    </div>
+    <div class="header-right">
+      <!-- 提醒开关 -->
+      <span id="remindToggle" class="remind-toggle off" title="点按开启/关闭提醒">
+        <span class="bell">🔔</span>
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+      </span>
+      <!-- 设置按钮 -->
+      <button class="icon-btn" id="settingsBtn" aria-label="设置">⚙️</button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ==================== 月份导航（对应 12 个工作表） ==================== -->
+    <section class="card month-card">
+      <button class="nav-btn" id="prevMonth" aria-label="上个月">‹</button>
+      <div class="month-info">
+        <div class="cal-title" id="calTitle">2026年8月</div>
+        <div class="cal-sub" id="calSub">本月已登记 0 场</div>
+      </div>
+      <button class="nav-btn" id="nextMonth" aria-label="下个月">›</button>
+      <button class="nav-btn" id="todayBtn" aria-label="回到今天">今</button>
+    </section>
+
+    <!-- ==================== 当日排班（重点①：当天 3 场一目了然） ==================== -->
+    <section class="card list-card" id="dayCard">
+      <div class="list-header">
+        <h2 id="listTitle">今日排班</h2>
+        <span class="list-count" id="listCount">0 / 3 场</span>
+      </div>
+      <div class="event-list" id="eventList">
+        <!-- 场次由 JS 动态生成 -->
+      </div>
+      <div class="day-tip">点场次卡片可编辑 · 空场次点「＋」直接添加</div>
+    </section>
+
+    <!-- ==================== 月历 ==================== -->
+    <section class="card calendar-card">
+      <div class="cal-weekdays">
+        <span>日</span><span>一</span><span>二</span><span>三</span>
+        <span>四</span><span>五</span><span>六</span>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-legend">● = 当天有排班</div>
+    </section>
+
+    <!-- ==================== 本月统计（重点②：场次统计直观可视化） ==================== -->
+    <section class="card stat-card">
+      <div class="list-header">
+        <h2>本月统计</h2>
+        <button class="btn btn-export" id="exportBtn" aria-label="导出CSV">导出 CSV</button>
+      </div>
+
+      <!-- 大数字 + 环形图 -->
+      <div class="stat-hero">
+        <div class="stat-hero-num">
+          <div class="stat-hero-big" id="statTotal">0</div>
+          <div class="stat-hero-label">本月总场次</div>
+        </div>
+        <div class="stat-donut-wrap">
+          <div class="stat-donut" id="statDonut"></div>
+          <div class="stat-donut-center" id="statDonutCenter">0</div>
+        </div>
+      </div>
+
+      <!-- 各门店进度条统计 -->
+      <div class="stat-grid" id="statGrid">
+        <!-- 各门店统计由 JS 生成 -->
+      </div>
+    </section>
+
+    <!-- 底部留白 -->
+    <div class="bottom-space"></div>
+  </main>
+
+  <!-- ==================== 添加按钮（悬浮） ==================== -->
+  <button class="fab" id="addBtn" aria-label="添加场次">＋</button>
+
+  <!-- ==================== 场次 添加 / 编辑弹窗 ==================== -->
+  <div class="modal-mask" id="modalMask">
+    <div class="modal" id="modal">
+      <h3 id="modalTitle">添加场次</h3>
+
+      <label class="field">
+        <span>场次</span>
+        <div class="slot-select" id="slotSelect">
+          <button class="slot-opt" data-slot="1">场次 1</button>
+          <button class="slot-opt" data-slot="2">场次 2</button>
+          <button class="slot-opt" data-slot="3">场次 3</button>
+        </div>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>日期 <i>*</i></span>
+          <input type="date" id="inputDate">
+        </label>
+      </div>
+
+      <label class="field">
+        <span>门店 <i>*</i></span>
+        <div class="select-wrap">
+          <select id="inputStore">
+            <!-- 由 JS 填充门店列表 -->
+          </select>
+          <button class="mini-btn" id="customStoreBtn" type="button" title="自定义门店">✏️ 自定义</button>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>时间段 <i>*</i></span>
+        <div class="select-wrap">
+          <select id="inputTime">
+            <!-- 由 JS 填充时间段列表 -->
+          </select>
+          <button class="mini-btn" id="customTimeBtn" type="button" title="自定义时间段">✏️ 自定义</button>
+        </div>
+      </label>
+
+      <label class="field">
+        <span>备注</span>
+        <textarea id="inputNote" rows="2" maxlength="200" placeholder="补充说明（可选）"></textarea>
+      </label>
+
+      <div class="modal-btns">
+        <button class="btn btn-delete hidden" id="deleteBtn">删除</button>
+        <div class="spacer"></div>
+        <button class="btn btn-cancel" id="cancelBtn">取消</button>
+        <button class="btn btn-save" id="saveBtn">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 设置弹窗 ==================== -->
+  <div class="modal-mask" id="settingsMask">
+    <div class="modal" id="settingsModal">
+      <h3>⚙️ 设置</h3>
+
+      <label class="field">
+        <span>歌手名称</span>
+        <input type="text" id="setSinger" maxlength="20" placeholder="例如：哲恒">
+      </label>
+
+      <label class="field">
+        <span>年份</span>
+        <input type="number" id="setYear" min="2020" max="2099">
+      </label>
+
+      <div class="field">
+        <span>门店列表（点 × 删除）</span>
+        <div class="chip-editor" id="storeEditor"></div>
+        <div class="chip-add">
+          <input type="text" id="storeInput" maxlength="20" placeholder="新增门店名称">
+          <button class="mini-btn" id="storeAddBtn" type="button">添加</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span>时间段列表（点 × 删除）</span>
+        <div class="chip-editor" id="timeEditor"></div>
+        <div class="chip-add">
+          <input type="text" id="timeInput" maxlength="20" placeholder="例如 23:30-00:10">
+          <button class="mini-btn" id="timeAddBtn" type="button">添加</button>
+        </div>
+      </div>
+
+      <div class="modal-btns">
+        <button class="btn btn-cancel" id="settingsReset">恢复默认</button>
+        <div class="spacer"></div>
+        <button class="btn btn-save" id="settingsSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8月排班初始数据（从 Excel 模板导入，应用启动时自动合并） -->
+  <script src="seed-august.js"></script>
+  <!-- 引入业务逻辑 -->
+  <script src="app.js"></script>
+</body>
+</html>
