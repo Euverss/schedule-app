@@ -41,6 +41,7 @@ let selectedDate = todayStr();
 let editingId = null;   // 正在编辑的场次 id
 let remindOn = localStorage.getItem(REMIND_KEY) === '1';
 let remindTimer = null;
+let filterStore = '';   // 门店筛选：'' = 全部；否则为门店名
 
 /* ---------- 2. 工具函数 ---------- */
 
@@ -65,8 +66,20 @@ function todayStr() {
 // '2026-08-25' → '8月25日 星期二'
 function formatDateCN(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
-  const week = ['日', '一', '二', '三', '四', '五', '六'][new Date(y, m - 1, d).getDay()];
-  return m + '月' + d + '日 星期' + week;
+  return m + '月' + d + '日 ' + weekdayCN(dateStr);
+}
+
+// '2026-08-25' → '星期二'
+function weekdayCN(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return '星期' + ['日', '一', '二', '三', '四', '五', '六'][new Date(y, m - 1, d).getDay()];
+}
+
+// 门店专属颜色（按 settings.stores 的顺序分配，列表外门店用第 4 色兜底）
+const STORE_COLORS = ['var(--store-1)', 'var(--store-2)', 'var(--store-3)', 'var(--store-4)'];
+function storeColor(name) {
+  const i = settings.stores.indexOf(name);
+  return STORE_COLORS[i >= 0 ? (i % STORE_COLORS.length) : 3];
 }
 
 // 当前视图月份的标识 '2026-08'
@@ -108,7 +121,13 @@ function renderHeader() {
   document.getElementById('calTitle').textContent = viewYear + '年' + (viewMonth + 1) + '月';
 
   const ms = monthShifts();
-  document.getElementById('calSub').textContent = '本月已登记 ' + ms.length + ' 场';
+  const calSub = document.getElementById('calSub');
+  if (filterStore) {
+    const n = ms.filter(s => s.store === filterStore).length;
+    calSub.textContent = '筛选：' + filterStore + ' · 本月 ' + n + ' 场';
+  } else {
+    calSub.textContent = '本月已登记 ' + ms.length + ' 场';
+  }
 }
 
 /* ---------- 4. 月历渲染 ---------- */
@@ -121,24 +140,28 @@ function renderCalendar() {
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
 
-  // 本月每天场次数（用于显示圆点）
+  // 本月每天场次数（用于显示圆点）；筛选门店时只统计该门店
   const countMap = {};
   monthShifts().forEach(s => {
+    if (filterStore && s.store !== filterStore) return;
     const d = Number(s.date.slice(8, 10));
     countMap[d] = (countMap[d] || 0) + 1;
   });
+
+  // 筛选门店时圆点用该门店颜色
+  const dotColor = filterStore ? storeColor(filterStore) : null;
 
   // 上个月补位
   for (let i = firstDay - 1; i >= 0; i--) {
     const d = prevMonthDays - i;
     const dateStr = new Date(viewYear, viewMonth - 1, d).toISOString().slice(0, 10);
-    grid.appendChild(dayCell(dateStr, true, 0));
+    grid.appendChild(dayCell(dateStr, true, 0, dotColor));
   }
 
   // 本月
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = viewYear + '-' + pad(viewMonth + 1) + '-' + pad(d);
-    grid.appendChild(dayCell(dateStr, false, countMap[d] || 0));
+    grid.appendChild(dayCell(dateStr, false, countMap[d] || 0, dotColor));
   }
 
   // 下个月补位
@@ -146,12 +169,20 @@ function renderCalendar() {
   if (nextCount < 7) {
     for (let d = 1; d <= nextCount; d++) {
       const dateStr = new Date(viewYear, viewMonth + 1, d).toISOString().slice(0, 10);
-      grid.appendChild(dayCell(dateStr, true, 0));
+      grid.appendChild(dayCell(dateStr, true, 0, dotColor));
     }
+  }
+
+  // 图例联动
+  const legend = document.getElementById('calLegend');
+  if (filterStore) {
+    legend.textContent = '● 圆点 = ' + filterStore + ' 有排班的日期';
+  } else {
+    legend.textContent = '● = 当天有排班';
   }
 }
 
-function dayCell(dateStr, otherMonth, count) {
+function dayCell(dateStr, otherMonth, count, dotColor) {
   const cell = document.createElement('div');
   cell.className = 'cal-day' + (otherMonth ? ' other-month' : '');
 
@@ -170,6 +201,7 @@ function dayCell(dateStr, otherMonth, count) {
     for (let i = 0; i < Math.min(count, 3); i++) {
       const dot = document.createElement('span');
       dot.className = 'dot';
+      if (dotColor) dot.style.background = dotColor; // 筛选门店时用门店色
       dots.appendChild(dot);
     }
     cell.appendChild(dots);
@@ -292,6 +324,142 @@ function emptySlot(slot) {
   return btn;
 }
 
+/* ---------- 5.5 门店筛选：查看该门店当月所有排班日期 ---------- */
+
+// 筛选按钮列表：设置里的门店 + 当月出现过但不在列表里的门店
+function filterStoreList() {
+  const list = settings.stores.slice();
+  const prefix = viewMonthKey() + '-';
+  shifts.forEach(s => {
+    if (s.date.startsWith(prefix) && !list.includes(s.store)) list.push(s.store);
+  });
+  return list;
+}
+
+// 门店筛选按钮组（全部 + 各门店）
+function renderStoreFilter() {
+  const box = document.getElementById('storeFilter');
+  box.innerHTML = '';
+
+  // 若当前筛选的门店已被删除/不存在 → 回到全部
+  if (filterStore && !filterStoreList().includes(filterStore)) filterStore = '';
+
+  // 「全部」按钮
+  const allBtn = document.createElement('button');
+  allBtn.className = 'store-chip' + (filterStore ? '' : ' active');
+  allBtn.style.setProperty('--chip-color', 'var(--primary)');
+  allBtn.textContent = '全部';
+  allBtn.addEventListener('click', () => {
+    if (filterStore) { filterStore = ''; renderAll(); }
+  });
+  box.appendChild(allBtn);
+
+  // 各门店按钮
+  filterStoreList().forEach(store => {
+    const btn = document.createElement('button');
+    btn.className = 'store-chip' + (filterStore === store ? ' active' : '');
+    btn.style.setProperty('--chip-color', storeColor(store));
+    btn.textContent = store;
+    btn.addEventListener('click', () => {
+      if (filterStore !== store) { filterStore = store; renderAll(); }
+    });
+    box.appendChild(btn);
+  });
+}
+
+// 所选门店当月所有排班日期列表
+function renderStoreDates() {
+  const box = document.getElementById('storeDates');
+  const count = document.getElementById('storeCount');
+  box.innerHTML = '';
+
+  if (!filterStore) {
+    count.textContent = filterStoreList().length + ' 家';
+    const hint = document.createElement('div');
+    hint.className = 'store-empty';
+    hint.textContent = '点上方门店按钮，查看该店当月所有排班日期';
+    box.appendChild(hint);
+    return;
+  }
+
+  // 该门店当月排班，按日期+场次排序
+  const list = monthShifts()
+    .filter(s => s.store === filterStore)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot);
+
+  count.textContent = list.length + ' 场';
+
+  if (list.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'store-empty';
+    hint.textContent = filterStore + ' 本月暂无排班';
+    box.appendChild(hint);
+    return;
+  }
+
+  // 同一天多场合并成一行
+  const byDate = {};
+  list.forEach(s => { (byDate[s.date] = byDate[s.date] || []).push(s); });
+
+  Object.keys(byDate).forEach(dateStr => {
+    const items = byDate[dateStr].sort((a, b) => a.slot - b.slot);
+    const color = storeColor(filterStore);
+    const row = document.createElement('div');
+    row.className = 'store-date-row';
+    row.style.setProperty('--row-color', color);
+
+    // 左侧：日期 + 星期
+    const left = document.createElement('div');
+    left.className = 'store-date-left';
+    const d = document.createElement('div');
+    d.className = 'store-date-d';
+    d.textContent = Number(dateStr.slice(8, 10));
+    left.appendChild(d);
+    const w = document.createElement('div');
+    w.className = 'store-date-w';
+    w.textContent = weekdayCN(dateStr);
+    left.appendChild(w);
+    row.appendChild(left);
+
+    // 右侧：当天该门店各场次
+    const right = document.createElement('div');
+    right.className = 'store-date-right';
+    items.forEach(s => {
+      const it = document.createElement('div');
+      it.className = 'store-date-item';
+      const badge = document.createElement('span');
+      badge.className = 'slot-badge slot-' + s.slot;
+      badge.textContent = '场次' + s.slot;
+      it.appendChild(badge);
+      const t = document.createElement('span');
+      t.className = 'store-date-time';
+      t.textContent = s.time || '—';
+      it.appendChild(t);
+      if (s.note) {
+        const n = document.createElement('span');
+        n.className = 'store-date-note';
+        n.textContent = s.note;
+        it.appendChild(n);
+      }
+      // 点击某场次 → 选中该日期并打开编辑
+      it.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        selectedDate = dateStr;
+        openModal(s);
+      });
+      right.appendChild(it);
+    });
+    row.appendChild(right);
+
+    // 点击整行 → 编辑该日第一场
+    row.addEventListener('click', () => {
+      selectedDate = dateStr;
+      openModal(items[0]);
+    });
+    box.appendChild(row);
+  });
+}
+
 /* ---------- 6. 统计面板 ---------- */
 
 function renderStats() {
@@ -318,7 +486,6 @@ function renderStats() {
   }
 
   // 统计各门店场次
-  const storeColors = ['var(--store-1)', 'var(--store-2)', 'var(--store-3)', 'var(--store-4)'];
   const stats = {};
   ms.forEach(s => { stats[s.store] = (stats[s.store] || 0) + 1; });
   const storeNames = Object.keys(stats);
@@ -329,7 +496,7 @@ function renderStats() {
     const pct = (stats[store] / total) * 100;
     const from = acc;
     acc += pct;
-    const color = storeColors[idx % storeColors.length];
+    const color = storeColor(store);
     return color + ' ' + from.toFixed(1) + '% ' + acc.toFixed(1) + '%';
   });
   donut.style.background = 'conic-gradient(' + stops.join(', ') + ')';
@@ -341,7 +508,7 @@ function renderStats() {
 
     const dot = document.createElement('div');
     dot.className = 'stat-dot';
-    dot.style.background = storeColors[idx % storeColors.length];
+    dot.style.background = storeColor(store);
     row.appendChild(dot);
 
     const name = document.createElement('div');
@@ -355,7 +522,7 @@ function renderStats() {
     const fill = document.createElement('div');
     fill.className = 'stat-bar-fill';
     fill.style.width = ((stats[store] / total) * 100).toFixed(1) + '%';
-    fill.style.background = storeColors[idx % storeColors.length];
+    fill.style.background = storeColor(store);
     track.appendChild(fill);
     row.appendChild(track);
 
@@ -639,8 +806,14 @@ function resetSettings() {
 /* ---------- 9. 导出本月排班（CSV） ---------- */
 
 function exportMonth() {
-  const ms = monthShifts().sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot);
-  if (ms.length === 0) { toast('本月还没有登记，无需导出'); return; }
+  // 筛选门店时只导出该门店当月数据
+  const ms = monthShifts()
+    .filter(s => !filterStore || s.store === filterStore)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.slot - b.slot);
+  if (ms.length === 0) {
+    toast(filterStore ? filterStore + ' 本月暂无排班，无需导出' : '本月还没有登记，无需导出');
+    return;
+  }
 
   const rows = [['日期', '星期', '场次', '门店', '时间段', '备注']];
   ms.forEach(s => {
@@ -653,11 +826,15 @@ function exportMonth() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = settings.singer + '_' + viewYear + '年' + (viewMonth + 1) + '月排班.csv';
+  if (filterStore) {
+    a.download = settings.singer + '_' + viewYear + '年' + (viewMonth + 1) + '月_' + filterStore + '排班.csv';
+  } else {
+    a.download = settings.singer + '_' + viewYear + '年' + (viewMonth + 1) + '月排班.csv';
+  }
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-  toast('已导出本月排班 CSV');
+  toast(filterStore ? '已导出 ' + filterStore + ' 当月排班 CSV' : '已导出本月排班 CSV');
 }
 
 /* ---------- 10. 到点提醒 ---------- */
@@ -724,6 +901,8 @@ function renderAll() {
   renderHeader();
   renderCalendar();
   renderList();
+  renderStoreFilter();
+  renderStoreDates();
   renderStats();
 }
 

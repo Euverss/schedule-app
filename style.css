@@ -304,6 +304,148 @@ body {
   text-align: center;
 }
 
+/* ---------- 门店排班（选门店看当月所有排班日期） ---------- */
+.store-card {
+  background: linear-gradient(135deg, #FFFFFF 0%, #F3F6FF 100%);
+  border: 1.5px solid rgba(79, 110, 247, 0.12);
+}
+
+/* 门店筛选按钮组：横向滑动 */
+.store-filter {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  margin-bottom: 10px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.store-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.store-chip {
+  flex: 0 0 auto;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 20px;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.store-chip:active {
+  opacity: 0.75;
+}
+
+.store-chip.active {
+  background: var(--chip-color, var(--primary));
+  border-color: var(--chip-color, var(--primary));
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 3px 10px rgba(79, 110, 247, 0.25);
+}
+
+/* 空状态提示 */
+.store-empty {
+  color: var(--text-sub);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px 0 12px;
+}
+
+/* 该门店当月排班日期列表 */
+.store-dates {
+  display: flex;
+  flex-direction: column;
+}
+
+.store-date-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-left: 4px solid var(--row-color, var(--primary));
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+
+.store-date-row:active {
+  transform: scale(0.98);
+}
+
+.store-date-row:hover {
+  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.12);
+}
+
+.store-date-left {
+  flex: 0 0 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px dashed var(--line);
+  padding-right: 12px;
+}
+
+.store-date-d {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--row-color, var(--primary));
+  font-variant-numeric: tabular-nums;
+}
+
+.store-date-w {
+  font-size: 10px;
+  color: var(--text-sub);
+  margin-top: 2px;
+}
+
+.store-date-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
+
+.store-date-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.store-date-item .slot-badge {
+  padding: 1px 7px;
+  font-size: 10px;
+  border-radius: 6px;
+}
+
+.store-date-time {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.store-date-note {
+  font-size: 11px;
+  color: var(--text-sub);
+  word-break: break-all;
+}
+
 /* ---------- 当日排班（重点卡片） ---------- */
 .list-card {
   background: linear-gradient(160deg, #FFFFFF 0%, #EEF1FE 100%);

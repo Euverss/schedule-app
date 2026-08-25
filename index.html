@@ -63,7 +63,21 @@
         <span>四</span><span>五</span><span>六</span>
       </div>
       <div class="cal-grid" id="calGrid"></div>
-      <div class="cal-legend">● = 当天有排班</div>
+      <div class="cal-legend" id="calLegend">● = 当天有排班</div>
+    </section>
+
+    <!-- ==================== 门店排班（选门店看当月所有排班日期） ==================== -->
+    <section class="card store-card">
+      <div class="list-header">
+        <h2>门店排班</h2>
+        <span class="list-count" id="storeCount">0 家</span>
+      </div>
+      <div class="store-filter" id="storeFilter">
+        <!-- 门店筛选按钮由 JS 生成 -->
+      </div>
+      <div class="store-dates" id="storeDates">
+        <!-- 所选门店当月排班日期由 JS 生成 -->
+      </div>
     </section>
 
     <!-- ==================== 本月统计（重点②：场次统计直观可视化） ==================== -->
