@@ -53,7 +53,7 @@
       <div class="event-list" id="eventList">
         <!-- 场次由 JS 动态生成 -->
       </div>
-      <div class="day-tip">点场次卡片可编辑 · 空场次点「＋」直接添加</div>
+      <div class="day-tip">点场次卡片可编辑 · 场次可记照片/歌单 · 空场次点「＋」直接添加</div>
     </section>
 
     <!-- ==================== 月历 ==================== -->
@@ -215,8 +215,51 @@
     </div>
   </div>
 
+  <!-- ==================== 演出记录面板（照片 / 歌单 / 现场备注） ==================== -->
+  <div class="modal-mask" id="recordMask">
+    <div class="modal record-panel" id="recordPanel">
+      <div class="record-head">
+        <div class="record-head-txt">
+          <h3>演出记录</h3>
+          <p class="record-sub" id="recordSub"></p>
+        </div>
+        <button class="record-close" id="recordCloseBtn" aria-label="关闭">×</button>
+      </div>
+
+      <div class="record-section">
+        <div class="record-label">现场照片 <span class="record-count" id="photoCountLabel"></span></div>
+        <div class="photo-grid" id="photoGrid"></div>
+        <p class="record-hint">照片自动压缩后仅保存在本机（不占云同步空间）· 每场最多 9 张</p>
+      </div>
+
+      <div class="record-section">
+        <div class="record-label">今晚歌单 <span class="record-count" id="songCountLabel"></span></div>
+        <div class="song-chips" id="songChips"></div>
+        <input type="text" id="songInput" maxlength="40" placeholder="输入歌名，回车添加">
+      </div>
+
+      <div class="record-section">
+        <div class="record-label">现场备注</div>
+        <textarea id="recordNoteInput" rows="3" maxlength="500" placeholder="记录现场情况：气氛、加歌、老板聊天…"></textarea>
+      </div>
+
+      <button class="btn btn-save record-save" id="recordSaveBtn">保存记录</button>
+      <p class="record-hint center">歌单与备注自动云同步 · 照片仅保存在本机</p>
+
+      <input type="file" id="photoFileInput" accept="image/*" multiple hidden>
+    </div>
+  </div>
+
+  <!-- 照片全屏查看 -->
+  <div class="photo-viewer" id="photoViewer">
+    <img id="photoViewerImg" alt="现场照片">
+    <p class="photo-viewer-tip">点任意处关闭</p>
+  </div>
+
   <!-- 8月排班初始数据（从 Excel 模板导入，应用启动时自动合并） -->
   <script src="seed-august.js"></script>
+  <!-- 照片本地存储（IndexedDB），须在 app.js 之前 -->
+  <script src="records-db.js"></script>
   <!-- 引入业务逻辑 -->
   <script src="app.js"></script>
   <!-- 引入多设备云同步（依赖 app.js 的数据与渲染函数） -->

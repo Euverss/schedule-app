@@ -79,8 +79,32 @@ function buildPayload() {
       note: s.note || '',
       deleted: !!s.deleted,
       updatedAt: s.updatedAt || 0
-    }))
+    })),
+    // 演出记录：只同步文字部分（歌单/备注/照片数量标记），照片本体留本机
+    records: buildRecordsPayload()
   };
+}
+
+// 演出记录打包：剥离 photoIds（照片仅本机），photoCount 记录本机真实张数
+function buildRecordsPayload() {
+  const out = {};
+  Object.keys(records).forEach(date => {
+    const day = records[date];
+    if (!day || typeof day !== 'object') return;
+    Object.keys(day).forEach(slot => {
+      const r = day[slot];
+      if (!r) return;
+      if (!out[date]) out[date] = {};
+      out[date][slot] = {
+        songs: Array.isArray(r.songs) ? r.songs : [],
+        note: r.note || '',
+        photoCount: (r.photoIds && r.photoIds.length) || 0,
+        deleted: !!r.deleted,
+        updatedAt: r.updatedAt || 0
+      };
+    });
+  });
+  return out;
 }
 
 // 把云端数据合并进本地。返回 true 表示本地数据发生了变化。
@@ -143,19 +167,84 @@ function mergeRemoteData(remote) {
     settingsChanged = true;
   }
 
-  if (changed || settingsChanged) {
+  // 5) 演出记录合并：文字部分（歌单/备注）按 updatedAt 新者胜出；
+  //    photoIds 始终保留本机（照片本体不同步），云端只取 photoCount 标记；
+  //    云端墓碑 → 本机记录同步删除（本机照片一并清理）
+  const recordsChanged = mergeRemoteRecords(remote.records);
+
+  if (changed || settingsChanged || recordsChanged) {
     window.__syncApplying = true; // 静默保存，不触发推送
     try {
       shifts = merged;
       saveShifts();
       if (settingsChanged) saveSettings();
+      if (recordsChanged) saveRecords();
     } finally {
       window.__syncApplying = false;
     }
     renderAll();
     toast('已从云端同步最新数据 ✓');
   }
-  return changed || settingsChanged;
+  return changed || settingsChanged || recordsChanged;
+}
+
+// 演出记录合并（返回 true 表示本地记录发生变化）
+function mergeRemoteRecords(remoteRecords) {
+  if (!remoteRecords || typeof remoteRecords !== 'object') return false;
+  const sigBefore = JSON.stringify(records);
+  let localChanged = false;
+
+  Object.keys(remoteRecords).forEach(date => {
+    const day = remoteRecords[date];
+    if (!day || typeof day !== 'object') return;
+    Object.keys(day).forEach(slotStr => {
+      const rr = day[slotStr];
+      if (!rr) return;
+      const slot = Number(slotStr);
+      if (!slot) return;
+
+      const local = records[date] && records[date][slot];
+      if (!local) {
+        // 本机没有 → 直接采用云端记录（本机无照片）
+        if (!records[date]) records[date] = {};
+        records[date][slot] = {
+          songs: Array.isArray(rr.songs) ? rr.songs : [],
+          note: rr.note || '',
+          photoIds: [],
+          photoCount: rr.photoCount || 0,
+          deleted: !!rr.deleted,
+          updatedAt: rr.updatedAt || 0
+        };
+        localChanged = true;
+      } else if ((rr.updatedAt || 0) > (local.updatedAt || 0)) {
+        // 云端较新 → 采用云端的文字部分；photoIds 保留本机
+        local.songs = Array.isArray(rr.songs) ? rr.songs : [];
+        local.note = rr.note || '';
+        local.photoCount = rr.photoCount || 0;
+        local.deleted = !!rr.deleted;
+        local.updatedAt = rr.updatedAt || 0;
+        localChanged = true;
+
+        // 云端删除（墓碑）→ 本机照片也清理
+        if (local.deleted && local.photoIds && local.photoIds.length) {
+          local.photoIds.forEach(id => { PhotoDB.remove(id).catch(() => {}); });
+          local.photoIds = [];
+        }
+      }
+    });
+  });
+
+  // 60 天前的已删除记录 → 彻底清理
+  const cutoff = Date.now() - 60 * 24 * 3600 * 1000;
+  Object.keys(records).forEach(date => {
+    Object.keys(records[date]).forEach(slot => {
+      const r = records[date][slot];
+      if (r && r.deleted && (r.updatedAt || 0) < cutoff) delete records[date][slot];
+    });
+    if (!Object.keys(records[date]).length) delete records[date];
+  });
+
+  return localChanged || JSON.stringify(records) !== sigBefore;
 }
 
 /* ---------- 内部：拉取 / 推送 / 状态 ---------- */

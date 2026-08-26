@@ -570,6 +570,115 @@ body {
   overflow: hidden;
 }
 
+/* ---------- 演出记录（照片 / 歌单）在场次卡片上的展示 ---------- */
+
+/* 有记录的场次：橙色描边高亮 */
+.event-item.has-record {
+  border-color: rgba(232, 92, 43, 0.45);
+  background: linear-gradient(160deg, #FFFFFF 0%, #FDF3EB 100%);
+}
+
+/* 照片缩略横滚条 */
+.event-photos {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.event-photos::-webkit-scrollbar { display: none; }
+
+.event-photo {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--line);
+  display: block;
+}
+
+/* 「还有 N 张」占位格 */
+.event-photo-more {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: rgba(232, 92, 43, 0.08);
+  color: var(--primary);
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.event-photo-more .cam {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 记录摘要行：歌单 N 首 / 现场备注 / 查看记录 */
+.event-record-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.record-tag {
+  background: rgba(232, 92, 43, 0.1);
+  color: var(--primary);
+  border-radius: 99px;
+  padding: 2px 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.record-open-btn {
+  margin-left: auto;
+  background: rgba(232, 92, 43, 0.1);
+  color: var(--primary);
+  border: none;
+  border-radius: 9px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.record-open-btn:active { transform: scale(0.95); }
+
+/* 未记录场次的虚线添加按钮 */
+.add-record-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  border: 1.5px dashed #E8C4A5;
+  border-radius: 10px;
+  padding: 7px;
+  background: none;
+  color: #C4885A;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.add-record-btn:active { transform: scale(0.98); }
+
+.add-record-btn:hover,
+.add-record-btn:active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(232, 92, 43, 0.04);
+}
+
 /* 空场次占位（点击添加） */
 .empty-slot {
   display: flex;
@@ -1159,6 +1268,234 @@ body {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- 演出记录面板（底部抽屉） ---------- */
+
+.record-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.record-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.record-head-txt h3 { margin-bottom: 4px; }
+
+.record-sub {
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.4;
+}
+
+.record-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg);
+  color: var(--text-sub);
+  font-size: 18px;
+  line-height: 32px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.record-close:active { transform: scale(0.92); }
+
+.record-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-label {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.record-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-sub);
+}
+
+.record-hint {
+  font-size: 10.5px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+.record-hint.center { text-align: center; }
+
+/* 照片网格（面板内 4 列） */
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.photo-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--line);
+  cursor: pointer;
+}
+
+.photo-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(35, 28, 22, 0.72);
+  color: #fff;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.photo-del:active { transform: scale(0.9); }
+
+/* 「＋ 添加」虚线格 */
+.photo-add {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 1.5px dashed #E8C4A5;
+  background: none;
+  color: #C4885A;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.photo-add .plus { font-size: 20px; line-height: 1; font-weight: 700; }
+
+.photo-add:active { transform: scale(0.96); }
+
+.photo-add:hover { border-color: var(--primary); color: var(--primary); }
+
+/* 另一台设备的照片提示 */
+.photo-remote-tip {
+  grid-column: 1 / -1;
+  font-size: 10.5px;
+  color: var(--text-sub);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 6px 9px;
+  text-align: center;
+}
+
+/* 歌单 chips */
+.song-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.song-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(232, 92, 43, 0.1);
+  color: var(--primary);
+  border-radius: 99px;
+  padding: 4px 10px 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 100%;
+}
+
+.song-chip .txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-chip .song-x {
+  border: none;
+  background: none;
+  color: rgba(232, 92, 43, 0.5);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+#songInput {
+  width: 100%;
+}
+
+.record-save {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 14px;
+}
+
+/* 照片全屏查看 */
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.94);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  cursor: zoom-out;
+  animation: fadeIn 0.15s;
+}
+
+.photo-viewer.show { display: flex; }
+
+.photo-viewer img {
+  max-width: 96vw;
+  max-height: 84vh;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.photo-viewer-tip {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  margin-top: 14px;
+}
+
+/* ---------- 月历：有演出记录的日期角标 ---------- */
+
+.cal-day.has-record::after {
+  content: '📷';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 /* ---------- 桌面端加宽 ---------- */

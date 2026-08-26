@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
 const SETTINGS_KEY = 'schedule.settings';
 const SHIFTS_KEY   = 'schedule.shifts';
 const REMIND_KEY   = 'schedule.remindOn';
+const RECORDS_KEY  = 'schedule.records';   // 演出记录（歌单/备注走云同步，照片仅本机）
 
 // 当前设置
 let settings = Object.assign(
@@ -33,6 +34,10 @@ let settings = Object.assign(
 
 // 所有场次：{ id, date:"YYYY-MM-DD", slot:1|2|3, store, time, note }
 let shifts = safeParse(localStorage.getItem(SHIFTS_KEY)) || [];
+
+// 演出记录：{ "YYYY-MM-DD": { 1: { songs:[], note:"", photoIds:[], photoCount:N, updatedAt } } }
+// photoIds = 本机 IndexedDB 里的照片 id（不同步）；photoCount = 云端标记的照片数（另一台设备的）
+let records = safeParse(localStorage.getItem(RECORDS_KEY)) || {};
 
 // 当前视图月份
 let viewYear  = settings.year;
@@ -58,6 +63,41 @@ function saveSettings() {
 function saveShifts() {
   localStorage.setItem(SHIFTS_KEY, JSON.stringify(shifts));
   if (!window.__syncApplying && window.Sync) Sync.markPending(); // 有修改 → 待同步
+}
+function saveRecords() {
+  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+  if (!window.__syncApplying && window.Sync) Sync.markPending(); // 歌单/备注 → 待同步
+}
+
+/* ---------- 2.5 演出记录：查询 ---------- */
+
+// 取某场次的记录（不存在/已删除返回 null）
+function getRecord(date, slot) {
+  const r = records[date] && records[date][slot];
+  return (r && !r.deleted) ? r : null;
+}
+
+// 记录是否有实际内容（照片 / 歌单 / 备注）
+function recordHasContent(r) {
+  if (!r) return false;
+  return (r.photoIds && r.photoIds.length > 0) ||
+         (r.songs && r.songs.length > 0) ||
+         !!r.note;
+}
+
+// 某天是否存在有内容的演出记录（月历角标用）
+function dayHasRecord(dateStr) {
+  const day = records[dateStr];
+  if (!day) return false;
+  return Object.keys(day).some(slot => recordHasContent(day[slot]));
+}
+
+// 面板里显示的照片总数：本机照片数 与 云端标记数 取大
+function recordPhotoTotal(r) {
+  if (!r) return 0;
+  const local = (r.photoIds && r.photoIds.length) || 0;
+  const remote = r.photoCount || 0;
+  return Math.max(local, remote);
 }
 
 function newId() {
@@ -161,17 +201,25 @@ function renderCalendar() {
   // 筛选门店时圆点用该门店颜色
   const dotColor = filterStore ? storeColor(filterStore) : null;
 
+  // 本月有演出记录的日期（照片/歌单角标，不受门店筛选影响）
+  const recordDays = {};
+  Object.keys(records).forEach(dateStr => {
+    if (dateStr.startsWith(viewMonthKey() + '-') && dayHasRecord(dateStr)) {
+      recordDays[dateStr] = true;
+    }
+  });
+
   // 上个月补位
   for (let i = firstDay - 1; i >= 0; i--) {
     const d = prevMonthDays - i;
     const dateStr = new Date(viewYear, viewMonth - 1, d).toISOString().slice(0, 10);
-    grid.appendChild(dayCell(dateStr, true, 0, dotColor));
+    grid.appendChild(dayCell(dateStr, true, 0, dotColor, recordDays[dateStr]));
   }
 
   // 本月
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = viewYear + '-' + pad(viewMonth + 1) + '-' + pad(d);
-    grid.appendChild(dayCell(dateStr, false, countMap[d] || 0, dotColor));
+    grid.appendChild(dayCell(dateStr, false, countMap[d] || 0, dotColor, recordDays[dateStr]));
   }
 
   // 下个月补位
@@ -179,20 +227,20 @@ function renderCalendar() {
   if (nextCount < 7) {
     for (let d = 1; d <= nextCount; d++) {
       const dateStr = new Date(viewYear, viewMonth + 1, d).toISOString().slice(0, 10);
-      grid.appendChild(dayCell(dateStr, true, 0, dotColor));
+      grid.appendChild(dayCell(dateStr, true, 0, dotColor, recordDays[dateStr]));
     }
   }
 
   // 图例联动
   const legend = document.getElementById('calLegend');
   if (filterStore) {
-    legend.textContent = '● 圆点 = ' + filterStore + ' 有排班的日期';
+    legend.textContent = '● 圆点 = ' + filterStore + ' 有排班的日期 · 📷 = 有演出记录';
   } else {
-    legend.textContent = '● = 当天有排班';
+    legend.textContent = '● = 当天有排班 · 📷 = 有演出记录';
   }
 }
 
-function dayCell(dateStr, otherMonth, count, dotColor) {
+function dayCell(dateStr, otherMonth, count, dotColor, hasRec) {
   const cell = document.createElement('div');
   cell.className = 'cal-day' + (otherMonth ? ' other-month' : '');
 
@@ -203,6 +251,7 @@ function dayCell(dateStr, otherMonth, count, dotColor) {
 
   if (isToday(dateStr)) cell.classList.add('today');
   if (dateStr === selectedDate) cell.classList.add('selected');
+  if (hasRec) cell.classList.add('has-record');
   if (count > 0) {
     cell.classList.add('has-event');
     const dots = document.createElement('span');
@@ -298,6 +347,75 @@ function eventItem(e) {
   }
 
   item.appendChild(main);
+
+  // —— 演出记录联动：有记录 → 照片缩略横滚 + 摘要行；无记录 → 虚线添加按钮 ——
+  const rec = getRecord(e.date, e.slot);
+  if (recordHasContent(rec)) {
+    item.classList.add('has-record');
+
+    // 照片缩略横滚（最多预览 3 张 + 「还有 N 张」）
+    if (rec.photoIds && rec.photoIds.length > 0) {
+      const strip = document.createElement('div');
+      strip.className = 'event-photos';
+      const shown = rec.photoIds.slice(0, 3);
+      shown.forEach(id => {
+        const img = document.createElement('img');
+        img.className = 'event-photo';
+        img.alt = '现场照片';
+        img.loading = 'lazy';
+        strip.appendChild(img);
+        PhotoDB.get(id).then(blob => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            img.src = url;
+            img.onload = () => URL.revokeObjectURL(url); // 加载完释放，下次从 IndexedDB 再取
+          }
+        }).catch(() => {});
+      });
+      if (rec.photoIds.length > shown.length) {
+        const more = document.createElement('div');
+        more.className = 'event-photo-more';
+        more.innerHTML = '<span class="cam">📷</span>还有' + (rec.photoIds.length - shown.length) + '张';
+        strip.appendChild(more);
+      }
+      item.appendChild(strip);
+    }
+
+    // 摘要行：歌单 N 首 / 现场备注 / 查看记录
+    const row = document.createElement('div');
+    row.className = 'event-record-row';
+    if (rec.songs && rec.songs.length > 0) {
+      const t = document.createElement('span');
+      t.className = 'record-tag';
+      t.textContent = '🎵 歌单 ' + rec.songs.length + ' 首';
+      row.appendChild(t);
+    }
+    if (rec.note) {
+      const t = document.createElement('span');
+      t.className = 'record-tag';
+      t.textContent = '📝 现场备注';
+      row.appendChild(t);
+    }
+    const openBtn = document.createElement('button');
+    openBtn.className = 'record-open-btn';
+    openBtn.textContent = '查看记录';
+    openBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation(); // 不触发卡片的编辑
+      openRecord(e);
+    });
+    row.appendChild(openBtn);
+    item.appendChild(row);
+  } else {
+    // 未记录 → 虚线添加按钮
+    const addBtn = document.createElement('button');
+    addBtn.className = 'add-record-btn';
+    addBtn.innerHTML = '📷 添加演出记录（照片 / 歌单）';
+    addBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      openRecord(e);
+    });
+    item.appendChild(addBtn);
+  }
 
   // 点击 → 编辑
   item.addEventListener('click', () => openModal(e));
@@ -693,6 +811,15 @@ function handleSave() {
     // 编辑
     const e = shifts.find(x => x.id === editingId);
     if (e) {
+      // 日期/场次变化 → 演出记录跟着搬家（照片 id 不变，无需移动 IndexedDB）
+      if ((e.date !== date || e.slot !== currentSlot) && getRecord(e.date, e.slot)) {
+        const rec = getRecord(e.date, e.slot);
+        delete records[e.date][e.slot];
+        if (!records[date]) records[date] = {};
+        records[date][currentSlot] = rec;
+        rec.updatedAt = Date.now();
+        saveRecords();
+      }
       e.date = date; e.slot = currentSlot; e.store = store; e.time = time; e.note = note;
       e.updatedAt = Date.now(); // 多设备同步用：最后修改时间
       e.deleted = false;
@@ -729,10 +856,251 @@ function handleDelete() {
   // 多设备同步：改成墓碑标记（deleted），让删除操作也能同步到其他设备
   const e = shifts.find(x => x.id === editingId);
   if (e) { e.deleted = true; e.updatedAt = Date.now(); }
+
+  // 连带处理演出记录：记录同样打墓碑同步删除；本机照片从 IndexedDB 清掉
+  const rec = getRecord(e.date, e.slot);
+  if (rec) {
+    rec.deleted = true;
+    rec.updatedAt = Date.now();
+    if (rec.photoIds && rec.photoIds.length) {
+      rec.photoIds.forEach(id => { PhotoDB.remove(id).catch(() => {}); });
+      rec.photoIds = [];
+    }
+    saveRecords();
+  }
+
   saveShifts();
   closeModal();
   renderAll();
   toast('已删除');
+}
+
+/* ---------- 7.5 演出记录面板（照片 / 歌单 / 现场备注） ---------- */
+
+let recordCtx = { date: '', slot: 0 };   // 当前打开面板的场次
+let recordUrls = [];                      // 面板里创建的 objectURL（关闭时统一释放）
+
+// 面板当前操作的记录（不存在则创建空记录）
+function ctxRecord() {
+  if (!records[recordCtx.date]) records[recordCtx.date] = {};
+  if (!records[recordCtx.date][recordCtx.slot]) {
+    records[recordCtx.date][recordCtx.slot] = { songs: [], note: '', photoIds: [], photoCount: 0, updatedAt: 0 };
+  }
+  return records[recordCtx.date][recordCtx.slot];
+}
+
+function openRecord(e) {
+  recordCtx = { date: e.date, slot: e.slot };
+
+  const sub = document.getElementById('recordSub');
+  sub.textContent = formatDateCN(e.date) + ' · 场次' + e.slot + ' · ' + e.store + (e.time ? ' · ' + e.time : '');
+
+  const rec = ctxRecord();
+  document.getElementById('recordNoteInput').value = rec.note || '';
+  renderSongChips();
+  renderPhotoGrid();
+
+  document.getElementById('recordMask').classList.add('show');
+}
+
+function closeRecord() {
+  // 备注即时保存（失焦兜底）
+  const rec = records[recordCtx.date] && records[recordCtx.date][recordCtx.slot];
+  if (rec && !rec.deleted) {
+    const txt = document.getElementById('recordNoteInput').value.trim();
+    if (txt !== (rec.note || '')) {
+      rec.note = txt;
+      rec.updatedAt = Date.now();
+      saveRecords();
+    }
+  }
+
+  document.getElementById('recordMask').classList.remove('show');
+  // 释放面板里所有 objectURL
+  recordUrls.forEach(u => URL.revokeObjectURL(u));
+  recordUrls = [];
+  // 刷新卡片与月历角标
+  renderList();
+  renderCalendar();
+}
+
+// 照片网格渲染
+function renderPhotoGrid() {
+  const grid = document.getElementById('photoGrid');
+  grid.innerHTML = '';
+  const rec = getRecord(recordCtx.date, recordCtx.slot);
+  const ids = (rec && rec.photoIds) || [];
+
+  document.getElementById('photoCountLabel').textContent = ids.length + ' / 9 张';
+
+  ids.forEach((id, idx) => {
+    const cell = document.createElement('div');
+    cell.className = 'photo-cell';
+    const img = document.createElement('img');
+    img.alt = '现场照片';
+    cell.appendChild(img);
+
+    // 点击 → 全屏查看
+    cell.addEventListener('click', (ev) => {
+      if (ev.target.closest('.photo-del')) return; // 点删除不触发查看
+      PhotoDB.get(id).then(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const viewerImg = document.getElementById('photoViewerImg');
+        viewerImg.onload = () => URL.revokeObjectURL(url);
+        viewerImg.src = url;
+        document.getElementById('photoViewer').classList.add('show');
+      }).catch(() => {});
+    });
+
+    // 删除按钮
+    const del = document.createElement('button');
+    del.className = 'photo-del';
+    del.textContent = '×';
+    del.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      removePhotoAt(idx);
+    });
+    cell.appendChild(del);
+
+    grid.appendChild(cell);
+    PhotoDB.get(id).then(blob => {
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        recordUrls.push(url);
+        img.src = url;
+      }
+    }).catch(() => {});
+  });
+
+  // 「＋ 添加」格（最多 9 张）
+  if (ids.length < 9) {
+    const add = document.createElement('button');
+    add.className = 'photo-add';
+    add.innerHTML = '<span class="plus">＋</span>添加';
+    add.addEventListener('click', () => {
+      document.getElementById('photoFileInput').click();
+    });
+    grid.appendChild(add);
+  }
+
+  // 另一台设备的照片提示
+  const remote = rec && (rec.photoCount || 0) > ids.length ? (rec.photoCount - ids.length) : 0;
+  if (remote > 0) {
+    const tip = document.createElement('div');
+    tip.className = 'photo-remote-tip';
+    tip.textContent = '另有 ' + remote + ' 张照片保存在添加它的那台设备上（照片不上云）';
+    grid.appendChild(tip);
+  }
+}
+
+// 删除一张照片（本机 IndexedDB + 记录同步更新）
+function removePhotoAt(idx) {
+  const rec = getRecord(recordCtx.date, recordCtx.slot);
+  if (!rec || !rec.photoIds || idx < 0 || idx >= rec.photoIds.length) return;
+  const id = rec.photoIds[idx];
+  rec.photoIds.splice(idx, 1);
+  rec.updatedAt = Date.now();
+  PhotoDB.remove(id).catch(() => {});
+  saveRecords();
+  renderPhotoGrid();
+}
+
+// 选中照片文件 → 压缩 → IndexedDB
+async function handlePhotoFiles(files) {
+  const rec = ctxRecord();
+  const remain = 9 - ((rec.photoIds && rec.photoIds.length) || 0);
+  if (remain <= 0) { toast('每场最多 9 张照片'); return; }
+
+  const list = Array.from(files).slice(0, remain);
+  if (Array.from(files).length > remain) toast('每场最多 9 张，已截取前 ' + remain + ' 张');
+
+  let added = 0;
+  for (const file of list) {
+    try {
+      const blob = await PhotoDB.compress(file);
+      const id = PhotoDB.newId();
+      await PhotoDB.add(id, blob);
+      rec.photoIds.push(id);
+      added++;
+    } catch (err) { /* 单张失败跳过 */ }
+  }
+
+  if (added > 0) {
+    rec.updatedAt = Date.now();
+    saveRecords();
+    renderPhotoGrid();
+    toast('已保存 ' + added + ' 张照片 ✓');
+  } else {
+    toast('照片保存失败，请重试');
+  }
+}
+
+// 歌单 chips 渲染
+function renderSongChips() {
+  const box = document.getElementById('songChips');
+  box.innerHTML = '';
+  const rec = getRecord(recordCtx.date, recordCtx.slot);
+  const songs = (rec && rec.songs) || [];
+
+  document.getElementById('songCountLabel').textContent = songs.length + ' 首';
+
+  songs.forEach((song, idx) => {
+    const chip = document.createElement('span');
+    chip.className = 'song-chip';
+    const txt = document.createElement('span');
+    txt.className = 'txt';
+    txt.textContent = song;
+    chip.appendChild(txt);
+    const x = document.createElement('button');
+    x.className = 'song-x';
+    x.textContent = '×';
+    x.addEventListener('click', () => {
+      rec.songs.splice(idx, 1);
+      rec.updatedAt = Date.now();
+      saveRecords();
+      renderSongChips();
+    });
+    chip.appendChild(x);
+    box.appendChild(chip);
+  });
+
+  if (songs.length === 0) {
+    const hint = document.createElement('span');
+    hint.className = 'record-hint';
+    hint.textContent = '还没有录歌，在下面输入框里回车添加';
+    box.appendChild(hint);
+  }
+}
+
+// 输入框回车 → 加歌
+function addSongFromInput() {
+  const input = document.getElementById('songInput');
+  const name = input.value.trim();
+  if (!name) return;
+  const rec = ctxRecord();
+  if (!rec.songs.includes(name)) {
+    rec.songs.push(name);
+    rec.updatedAt = Date.now();
+    saveRecords();
+  }
+  input.value = '';
+  renderSongChips();
+}
+
+// 「保存记录」按钮：兜底保存并关闭
+function saveRecordAndClose() {
+  const rec = records[recordCtx.date] && records[recordCtx.date][recordCtx.slot];
+  if (rec && !rec.deleted) {
+    const txt = document.getElementById('recordNoteInput').value.trim();
+    if (txt !== (rec.note || '')) {
+      rec.note = txt;
+      rec.updatedAt = Date.now();
+    }
+    saveRecords();
+  }
+  closeRecord();
+  toast('演出记录已保存 ✓');
 }
 
 /* ---------- 8. 设置弹窗 ---------- */
@@ -1022,6 +1390,37 @@ document.getElementById('exportBtn').addEventListener('click', exportMonth);
 
 // 提醒开关
 document.getElementById('remindToggle').addEventListener('click', toggleRemind);
+
+// 演出记录面板
+document.getElementById('recordCloseBtn').addEventListener('click', closeRecord);
+document.getElementById('recordSaveBtn').addEventListener('click', saveRecordAndClose);
+document.getElementById('recordMask').addEventListener('click', (ev) => {
+  if (ev.target === document.getElementById('recordMask')) closeRecord();
+});
+document.getElementById('photoFileInput').addEventListener('change', (ev) => {
+  if (ev.target.files && ev.target.files.length > 0) handlePhotoFiles(ev.target.files);
+  ev.target.value = ''; // 允许重复选择同一张图
+});
+document.getElementById('songInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); addSongFromInput(); }
+});
+document.getElementById('recordNoteInput').addEventListener('change', () => {
+  // 备注即时保存（失焦时）
+  const rec = records[recordCtx.date] && records[recordCtx.date][recordCtx.slot];
+  if (rec && !rec.deleted) {
+    const txt = document.getElementById('recordNoteInput').value.trim();
+    if (txt !== (rec.note || '')) {
+      rec.note = txt;
+      rec.updatedAt = Date.now();
+      saveRecords();
+    }
+  }
+});
+
+// 照片全屏查看：点任意处关闭
+document.getElementById('photoViewer').addEventListener('click', () => {
+  document.getElementById('photoViewer').classList.remove('show');
+});
 
 // 页面进入前台时检查提醒
 document.addEventListener('visibilitychange', () => {
