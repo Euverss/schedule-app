@@ -4,7 +4,7 @@
    之后即使没有网络也能正常打开使用。
    ========================================================= */
 
-const CACHE_NAME = 'schedule-app-v7';
+const CACHE_NAME = 'schedule-app-v8';
 // 需要缓存的文件（相对路径）
 const ASSETS = [
   './',
@@ -14,6 +14,7 @@ const ASSETS = [
   './sync.js',
   './seed-august.js',
   './manifest.json',
+  './icons/icon-192.png',
   './icons/icon-512.png'
 ];
 
