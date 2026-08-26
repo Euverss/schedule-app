@@ -200,6 +200,13 @@
         </div>
       </div>
 
+      <div class="field">
+        <span>多设备同步（手机 / 电脑互通）</span>
+        <div id="syncBox">
+          <!-- 同步状态与 Token 绑定由 sync.js 生成 -->
+        </div>
+      </div>
+
       <div class="modal-btns">
         <button class="btn btn-cancel" id="settingsReset">恢复默认</button>
         <div class="spacer"></div>
@@ -212,5 +219,7 @@
   <script src="seed-august.js"></script>
   <!-- 引入业务逻辑 -->
   <script src="app.js"></script>
+  <!-- 引入多设备云同步（依赖 app.js 的数据与渲染函数） -->
+  <script src="sync.js"></script>
 </body>
 </html>

@@ -1019,6 +1019,74 @@ body {
   border-color: rgba(79, 110, 247, 0.3);
 }
 
+/* ---------- 多设备同步 ---------- */
+.sync-row {
+  display: flex;
+  gap: 8px;
+}
+
+.sync-row input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.sync-row .mini-btn {
+  padding: 0 16px;
+  color: var(--primary);
+  border-color: rgba(79, 110, 247, 0.3);
+}
+
+/* 同步状态行 */
+.sync-state {
+  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+
+.sync-state.ok {
+  background: rgba(47, 166, 106, 0.08);
+  color: var(--success);
+}
+
+.sync-state.err {
+  background: rgba(229, 72, 77, 0.08);
+  color: var(--danger);
+}
+
+/* 帮助说明 */
+.sync-help {
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.7;
+  margin-top: 8px;
+}
+
+.sync-help b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sync-help a {
+  color: var(--primary);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(79, 110, 247, 0.5);
+  padding-bottom: 1px;
+}
+
+/* 已绑定时的按钮行 */
+.sync-state + .sync-row {
+  margin-bottom: 0;
+}
+
+.sync-unbind {
+  color: var(--danger) !important;
+  border-color: rgba(229, 72, 77, 0.3) !important;
+}
+
 /* 弹窗按钮 */
 .modal-btns {
   display: flex;

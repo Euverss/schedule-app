@@ -41,6 +41,7 @@ let selectedDate = todayStr();
 let editingId = null;   // 正在编辑的场次 id
 let remindOn = localStorage.getItem(REMIND_KEY) === '1';
 let remindTimer = null;
+let notifiedSet = new Set(); // 今天已提醒过的场次（仅内存，避免触发云同步）
 let filterStore = '';   // 门店筛选：'' = 全部；否则为门店名
 
 /* ---------- 2. 工具函数 ---------- */
@@ -49,8 +50,15 @@ function safeParse(str) {
   try { return JSON.parse(str); } catch (e) { return null; }
 }
 
-function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
-function saveShifts()   { localStorage.setItem(SHIFTS_KEY, JSON.stringify(shifts)); }
+function saveSettings() {
+  settings._savedAt = Date.now(); // 用于多设备同步时判断设置新旧
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  if (!window.__syncApplying && window.Sync) Sync.markPending(); // 有修改 → 待同步
+}
+function saveShifts() {
+  localStorage.setItem(SHIFTS_KEY, JSON.stringify(shifts));
+  if (!window.__syncApplying && window.Sync) Sync.markPending(); // 有修改 → 待同步
+}
 
 function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -87,15 +95,15 @@ function viewMonthKey() {
   return viewYear + '-' + pad(viewMonth + 1);
 }
 
-// 当月场次
+// 当月场次（不含已删除的墓碑记录）
 function monthShifts() {
   const prefix = viewMonthKey() + '-';
-  return shifts.filter(s => s.date.startsWith(prefix));
+  return shifts.filter(s => !s.deleted && s.date.startsWith(prefix));
 }
 
-// 某天的场次
+// 某天的场次（不含墓碑）
 function dayShifts(dateStr) {
-  return shifts.filter(s => s.date === dateStr);
+  return shifts.filter(s => !s.deleted && s.date === dateStr);
 }
 
 // 轻提示
@@ -117,7 +125,9 @@ function toast(msg) {
 
 function renderHeader() {
   document.getElementById('appTitle').textContent = settings.singer + ' 排班登记';
-  document.getElementById('headerDate').textContent = '年份 ' + settings.year + ' · 数据保存在本机';
+  // 副标题：同步状态（已绑定云同步时显示同步情况，否则提示本机保存）
+  const syncStatus = (window.Sync && Sync.statusText()) || '数据保存在本机';
+  document.getElementById('headerDate').textContent = '年份 ' + settings.year + ' · ' + syncStatus;
   document.getElementById('calTitle').textContent = viewYear + '年' + (viewMonth + 1) + '月';
 
   const ms = monthShifts();
@@ -331,7 +341,7 @@ function filterStoreList() {
   const list = settings.stores.slice();
   const prefix = viewMonthKey() + '-';
   shifts.forEach(s => {
-    if (s.date.startsWith(prefix) && !list.includes(s.store)) list.push(s.store);
+    if (!s.deleted && s.date.startsWith(prefix) && !list.includes(s.store)) list.push(s.store);
   });
   return list;
 }
@@ -684,10 +694,12 @@ function handleSave() {
     const e = shifts.find(x => x.id === editingId);
     if (e) {
       e.date = date; e.slot = currentSlot; e.store = store; e.time = time; e.note = note;
+      e.updatedAt = Date.now(); // 多设备同步用：最后修改时间
+      e.deleted = false;
     }
   } else {
-    // 新增：检查当天该场次是否冲突
-    const dup = shifts.find(x => x.date === date && x.slot === currentSlot);
+    // 新增：检查当天该场次是否冲突（只算未删除的）
+    const dup = shifts.find(x => !x.deleted && x.date === date && x.slot === currentSlot);
     if (dup) { toast('场次 ' + currentSlot + ' 当天已登记，请选择其他场次'); return; }
     // 检查当天是否满 3 场
     if (dayShifts(date).length >= 3) {
@@ -696,7 +708,8 @@ function handleSave() {
     }
     shifts.push({
       id: newId(),
-      date, slot: currentSlot, store, time, note
+      date, slot: currentSlot, store, time, note,
+      updatedAt: Date.now()
     });
   }
 
@@ -713,7 +726,9 @@ function handleSave() {
 }
 
 function handleDelete() {
-  shifts = shifts.filter(x => x.id !== editingId);
+  // 多设备同步：改成墓碑标记（deleted），让删除操作也能同步到其他设备
+  const e = shifts.find(x => x.id === editingId);
+  if (e) { e.deleted = true; e.updatedAt = Date.now(); }
   saveShifts();
   closeModal();
   renderAll();
@@ -727,6 +742,7 @@ function openSettings() {
   document.getElementById('setYear').value = settings.year;
   renderChips('store');
   renderChips('time');
+  if (window.Sync) Sync.renderSyncUI(); // 刷新多设备同步区域
   document.getElementById('settingsMask').classList.add('show');
 }
 
@@ -881,10 +897,10 @@ function checkReminders() {
     const m = startStr.match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return;
     const startMin = Number(m[1]) * 60 + Number(m[2]);
-    // 到点前后 1 分钟内提醒一次（用 s._notified 标记）
-    if (Math.abs(curMin - startMin) <= 1 && !s._notified) {
-      s._notified = true;
-      saveShifts();
+    // 到点前后 1 分钟内提醒一次（内存标记，不写入存储、不触发同步）
+    const flag = s.id + '|' + today;
+    if (Math.abs(curMin - startMin) <= 1 && !notifiedSet.has(flag)) {
+      notifiedSet.add(flag);
       try {
         new Notification('🔔 ' + s.time + ' ' + s.store, {
           body: '场次' + s.slot + ' · ' + s.store + (s.note ? '\n' + s.note : ''),
@@ -909,7 +925,9 @@ function renderAll() {
 /* ---------- 11.5 初始数据导入（Excel 8月排班） ---------- */
 
 // 把 seed-august.js 提供的 8 月排班合并进本地数据。
-// 已存在"同日期+同场次"的记录会跳过，不会覆盖用户自己录的数据。
+// 已存在"同日期+同场次"的记录（含已删除的墓碑）会跳过：
+// 不会覆盖用户自己录的数据，已删除的也不会被"复活"。
+// id 采用确定性规则（seed-日期-场次），保证每台设备导入后 id 一致，同步不重复。
 function importSeedShifts() {
   const seed = window.AUGUST_SEED;
   if (!Array.isArray(seed) || seed.length === 0) return 0;
@@ -918,14 +936,15 @@ function importSeedShifts() {
   seed.forEach(s => {
     if (!s || !s.date || !s.store) return;
     const dup = shifts.find(x => x.date === s.date && x.slot === s.slot);
-    if (dup) return; // 该日期该场次已登记 → 跳过
+    if (dup) return; // 该日期该场次已登记（或已删除）→ 跳过
     shifts.push({
-      id: newId(),
+      id: 'seed-' + s.date + '-' + s.slot,
       date: s.date,
       slot: s.slot,
       store: s.store,
       time: s.time || '',
-      note: s.note || ''
+      note: s.note || '',
+      updatedAt: 0
     });
     added++;
   });
@@ -1024,6 +1043,7 @@ const importedCount = importSeedShifts();
 
 renderAll();
 if (remindOn) startRemindLoop();
+// 云同步由 sync.js 自行启动（它在本文件之后加载）
 
 // 导入完成提示（等页面渲染完再显示，避免被其他 toast 覆盖）
 if (importedCount > 0) {
