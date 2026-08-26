@@ -12,23 +12,23 @@
 }
 
 :root {
-  --primary: #4F6EF7;
-  --primary-dark: #3D58D8;
-  --bg: #F3F5FB;
+  --primary: #E85C2B;
+  --primary-dark: #C94A1F;
+  --bg: #FBF3EC;
   --card: #FFFFFF;
-  --text: #23283A;
-  --text-sub: #8A90A8;
-  --line: #E8EAF2;
+  --text: #2E2A26;
+  --text-sub: #9A8F88;
+  --line: #F0E7DF;
   --danger: #E5484D;
   --success: #2FA66A;
-  --radius: 16px;
-  --shadow: 0 4px 18px rgba(79, 110, 247, 0.10);
+  --radius: 20px;
+  --shadow: 0 4px 18px rgba(232, 92, 43, 0.08);
 
-  /* 4 家门店的颜色 */
-  --store-1: #4F6EF7;
-  --store-2: #2FA66A;
-  --store-3: #F59E0B;
-  --store-4: #EF5DA8;
+  /* 4 家门店的颜色（暖橙系） */
+  --store-1: #E85C2B;
+  --store-2: #E9A13B;
+  --store-3: #E25C7A;
+  --store-4: #8A5A3B;
 }
 
 html, body {
@@ -54,9 +54,9 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px 10px;
-  background: linear-gradient(135deg, #5B7CFA 0%, #4F6EF7 100%);
+  background: #E85C2B;
   color: #fff;
-  box-shadow: 0 2px 12px rgba(79, 110, 247, 0.35);
+  box-shadow: 0 2px 12px rgba(232, 92, 43, 0.35);
 }
 
 .header-left h1 {
@@ -205,7 +205,7 @@ body {
   font-size: 15px;
   font-weight: 700;
   color: var(--primary);
-  background: #EEF1FE;
+  background: #FDEEE6;
 }
 
 /* ---------- 月历 ---------- */
@@ -247,20 +247,20 @@ body {
 }
 
 .cal-day.other-month {
-  color: #C4C8D8;
+  color: #D8CFC6;
 }
 
 .cal-day.today {
   font-weight: 700;
   color: var(--primary);
-  background: #EEF1FE;
+  background: #FDEEE6;
 }
 
 .cal-day.selected {
   background: var(--primary);
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 3px 10px rgba(79, 110, 247, 0.4);
+  box-shadow: 0 3px 10px rgba(232, 92, 43, 0.4);
 }
 
 .cal-day.selected:hover {
@@ -306,8 +306,9 @@ body {
 
 /* ---------- 门店排班（选门店看当月所有排班日期） ---------- */
 .store-card {
-  background: linear-gradient(135deg, #FFFFFF 0%, #F3F6FF 100%);
-  border: 1.5px solid rgba(79, 110, 247, 0.12);
+  background: #FFFFFF;
+  border: none;
+  box-shadow: 0 6px 20px rgba(232, 92, 43, 0.10);
 }
 
 /* 门店筛选按钮组：横向滑动 */
@@ -348,7 +349,7 @@ body {
   border-color: var(--chip-color, var(--primary));
   color: #fff;
   font-weight: 700;
-  box-shadow: 0 3px 10px rgba(79, 110, 247, 0.25);
+  box-shadow: 0 3px 10px rgba(232, 92, 43, 0.25);
 }
 
 /* 空状态提示 */
@@ -384,7 +385,7 @@ body {
 }
 
 .store-date-row:hover {
-  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.12);
+  box-shadow: 0 4px 14px rgba(232, 92, 43, 0.12);
 }
 
 .store-date-left {
@@ -448,8 +449,9 @@ body {
 
 /* ---------- 当日排班（重点卡片） ---------- */
 .list-card {
-  background: linear-gradient(160deg, #FFFFFF 0%, #EEF1FE 100%);
-  border: 1.5px solid rgba(79, 110, 247, 0.18);
+  background: #FFFFFF;
+  border: none;
+  box-shadow: 0 6px 20px rgba(232, 92, 43, 0.10);
   position: relative;
 }
 
@@ -501,7 +503,7 @@ body {
 }
 
 .event-item:hover {
-  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.12);
+  box-shadow: 0 4px 14px rgba(232, 92, 43, 0.12);
 }
 
 /* 场次徽标：横条式 */
@@ -549,7 +551,7 @@ body {
 }
 
 .event-time {
-  background: rgba(79, 110, 247, 0.1);
+  background: rgba(232, 92, 43, 0.1);
   color: var(--primary);
   padding: 1px 7px;
   border-radius: 9px;
@@ -577,7 +579,7 @@ body {
   gap: 6px;
   padding: 14px 6px;
   border-radius: 14px;
-  border: 1.5px dashed #C9CEE4;
+  border: 1.5px dashed #E5D5C8;
   color: var(--text-sub);
   font-size: 12px;
   cursor: pointer;
@@ -615,8 +617,9 @@ body {
 }
 
 .empty-slot .slot-badge {
-  background: var(--line);
-  color: var(--text-sub);
+  background: rgba(232, 92, 43, 0.12);
+  color: var(--primary);
+  font-weight: 700;
 }
 
 /* 当天 3 场已满的提示 */
@@ -637,12 +640,13 @@ body {
 
 /* ---------- 统计面板（重点卡片） ---------- */
 .stat-card {
-  background: linear-gradient(135deg, #FFFFFF 0%, #F0F3FE 100%);
-  border: 1.5px solid rgba(79, 110, 247, 0.12);
+  background: #FFFFFF;
+  border: none;
+  box-shadow: 0 6px 20px rgba(232, 92, 43, 0.10);
 }
 
 .btn-export {
-  border: 1.5px solid rgba(79, 110, 247, 0.35);
+  border: 1.5px solid rgba(232, 92, 43, 0.35);
   background: #fff;
   color: var(--primary);
   font-size: 12px;
@@ -698,7 +702,7 @@ body {
   border-radius: 50%;
   background: var(--line); /* 无数据时灰色 */
   transition: background 0.3s;
-  box-shadow: 0 4px 14px rgba(79, 110, 247, 0.15);
+  box-shadow: 0 4px 14px rgba(232, 92, 43, 0.15);
 }
 
 .stat-donut-center {
@@ -717,7 +721,7 @@ body {
   font-weight: 800;
   color: var(--text);
   line-height: 1;
-  box-shadow: 0 2px 8px rgba(35, 40, 58, 0.08);
+  box-shadow: 0 2px 8px rgba(46, 34, 26, 0.08);
 }
 
 .stat-donut-center small {
@@ -741,7 +745,7 @@ body {
   background: #fff;
   border-radius: 12px;
   padding: 10px 12px;
-  box-shadow: 0 2px 8px rgba(79, 110, 247, 0.06);
+  box-shadow: 0 2px 8px rgba(232, 92, 43, 0.06);
 }
 
 .stat-dot {
@@ -811,7 +815,7 @@ body {
   font-size: 30px;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(79, 110, 247, 0.45);
+  box-shadow: 0 6px 20px rgba(232, 92, 43, 0.45);
   transition: transform 0.15s, background 0.2s;
   z-index: 60;
   display: flex;
@@ -875,7 +879,7 @@ body {
 .slot-opt {
   flex: 1;
   border: 1.5px solid var(--line);
-  background: #FBFBFE;
+  background: #FCF7F2;
   border-radius: 12px;
   padding: 10px 0;
   font-size: 14px;
@@ -886,7 +890,7 @@ body {
 
 .slot-opt.active {
   border-color: var(--primary);
-  background: #EEF1FE;
+  background: #FDEEE6;
   color: var(--primary);
   font-weight: 700;
 }
@@ -918,7 +922,7 @@ body {
   font-size: 15px;
   font-family: inherit;
   color: var(--text);
-  background: #FBFBFE;
+  background: #FCF7F2;
   outline: none;
   transition: border-color 0.2s;
 }
@@ -956,7 +960,7 @@ body {
 
 .mini-btn {
   border: 1.5px solid var(--line);
-  background: #FBFBFE;
+  background: #FCF7F2;
   border-radius: 12px;
   padding: 0 12px;
   font-size: 13px;
@@ -1016,7 +1020,7 @@ body {
 .chip-add .mini-btn {
   padding: 0 16px;
   color: var(--primary);
-  border-color: rgba(79, 110, 247, 0.3);
+  border-color: rgba(232, 92, 43, 0.3);
 }
 
 /* ---------- 多设备同步 ---------- */
@@ -1034,7 +1038,7 @@ body {
 .sync-row .mini-btn {
   padding: 0 16px;
   color: var(--primary);
-  border-color: rgba(79, 110, 247, 0.3);
+  border-color: rgba(232, 92, 43, 0.3);
 }
 
 /* 同步状态行 */
@@ -1073,7 +1077,7 @@ body {
 .sync-help a {
   color: var(--primary);
   text-decoration: none;
-  border-bottom: 1px dashed rgba(79, 110, 247, 0.5);
+  border-bottom: 1px dashed rgba(232, 92, 43, 0.5);
   padding-bottom: 1px;
 }
 
@@ -1139,7 +1143,7 @@ body {
   left: 50%;
   bottom: calc(90px + env(safe-area-inset-bottom));
   transform: translateX(-50%) translateY(20px);
-  background: rgba(35, 40, 58, 0.92);
+  background: rgba(46, 34, 26, 0.92);
   color: #fff;
   padding: 10px 20px;
   border-radius: 24px;
