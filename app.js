@@ -35,8 +35,8 @@ let settings = Object.assign(
 // 所有场次：{ id, date:"YYYY-MM-DD", slot:1|2|3, store, time, note }
 let shifts = safeParse(localStorage.getItem(SHIFTS_KEY)) || [];
 
-// 演出记录：{ "YYYY-MM-DD": { 1: { songs:[], note:"", photoIds:[], photoCount:N, updatedAt } } }
-// photoIds = 本机 IndexedDB 里的照片 id（不同步）；photoCount = 云端标记的照片数（另一台设备的）
+// 演出记录：{ "YYYY-MM-DD": { 1: { songs:[], note:"", photos:[{id,path}], updatedAt } } }
+// photos[].id = 本机 IndexedDB 里的照片 id（云端拉取的照片会静默回填）；photos[].path = 云端路径（空=待上传）
 let records = safeParse(localStorage.getItem(RECORDS_KEY)) || {};
 
 // 当前视图月份
@@ -77,10 +77,23 @@ function getRecord(date, slot) {
   return (r && !r.deleted) ? r : null;
 }
 
+// 取记录的照片数组（旧数据 photoIds → 新结构 photos 自动迁移）
+// 新结构：photos: [{ id: '本机IndexedDB键（云端照片可为空）', path: '云端路径（空=待上传）' }]
+function recPhotos(rec) {
+  if (!rec) return [];
+  if (Array.isArray(rec.photos)) return rec.photos;
+  if (Array.isArray(rec.photoIds) && rec.photoIds.length) {
+    rec.photos = rec.photoIds.map(id => ({ id: id, path: '' }));
+    delete rec.photoIds;
+    return rec.photos;
+  }
+  return [];
+}
+
 // 记录是否有实际内容（照片 / 歌单 / 备注）
 function recordHasContent(r) {
   if (!r) return false;
-  return (r.photoIds && r.photoIds.length > 0) ||
+  return recPhotos(r).length > 0 ||
          (r.songs && r.songs.length > 0) ||
          !!r.note;
 }
@@ -92,10 +105,10 @@ function dayHasRecord(dateStr) {
   return Object.keys(day).some(slot => recordHasContent(day[slot]));
 }
 
-// 面板里显示的照片总数：本机照片数 与 云端标记数 取大
+// 面板里显示的照片总数：照片数 与 云端标记数 取大
 function recordPhotoTotal(r) {
   if (!r) return 0;
-  const local = (r.photoIds && r.photoIds.length) || 0;
+  const local = recPhotos(r).length;
   const remote = r.photoCount || 0;
   return Math.max(local, remote);
 }
@@ -103,6 +116,77 @@ function recordPhotoTotal(r) {
 function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
+
+// 加载一张照片的 Blob：本机 IndexedDB 优先；本机没有但有云端路径 → 从云端拉取并静默缓存
+// （缓存写入不触发云同步，避免循环）
+async function loadPhotoBlob(ph) {
+  if (!ph) return null;
+  if (ph.id) {
+    try {
+      const blob = await PhotoDB.get(ph.id);
+      if (blob) return blob;
+    } catch (e) { /* 本机没有，继续试云端 */ }
+  }
+  if (ph.path && window.PhotoCloud && PhotoCloud.configured()) {
+    const blob = await PhotoCloud.fetchBlob(ph.path);
+    if (blob) {
+      // 静默缓存到本机，下次直接本地读
+      try {
+        const id = PhotoDB.newId();
+        await PhotoDB.add(id, blob);
+        ph.id = id;
+      } catch (e) { /* 缓存失败不影响显示 */ }
+    }
+    return blob;
+  }
+  return null;
+}
+
+/* ---------- 待上传队列：把本机新增的照片传到 GitHub 私有仓库 ---------- */
+
+let photoUploadBusy = false;
+
+async function uploadPendingPhotos() {
+  if (!window.PhotoCloud || !PhotoCloud.configured() || photoUploadBusy) return;
+  photoUploadBusy = true;
+  try {
+    // 扫描所有记录，找 path 为空（待上传）的照片
+    const tasks = []; // {date, slot, rec, ph}
+    for (const date of Object.keys(records)) {
+      for (const slot of Object.keys(records[date])) {
+        const rec = records[date][slot];
+        if (rec && !rec.deleted) {
+          recPhotos(rec).forEach(ph => {
+            if (!ph.path) tasks.push({ date, slot, rec, ph });
+          });
+        }
+      }
+    }
+    if (!tasks.length) return;
+
+    let uploaded = 0;
+    for (const t of tasks) {
+      if (!t.ph.id) continue; // 本机没有文件（如另一台设备添加的），等那台设备传
+      const blob = await PhotoDB.get(t.ph.id).catch(() => null);
+      if (!blob) continue;
+      const path = PhotoCloud.photoPath(t.date, t.slot, t.ph.id);
+      try {
+        await PhotoCloud.upload(blob, path);
+        t.ph.path = path;
+        t.rec.updatedAt = Date.now();
+        uploaded++;
+      } catch (e) { /* 单张失败下次再传 */ }
+    }
+    if (uploaded > 0) {
+      saveRecords();
+      // 刷新当前打开的面板（若有），去掉「待上传」角标
+      if (document.getElementById('recordMask').classList.contains('show')) renderPhotoGrid();
+    }
+  } finally {
+    photoUploadBusy = false;
+  }
+}
+window.uploadPendingPhotos = uploadPendingPhotos;
 
 function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -358,17 +442,18 @@ function eventItem(e) {
     item.classList.add('has-record');
 
     // 照片缩略横滚（最多预览 3 张 + 「还有 N 张」）
-    if (rec.photoIds && rec.photoIds.length > 0) {
+    const photos = recPhotos(rec);
+    if (photos.length > 0) {
       const strip = document.createElement('div');
       strip.className = 'event-photos';
-      const shown = rec.photoIds.slice(0, 3);
-      shown.forEach(id => {
+      const shown = photos.slice(0, 3);
+      shown.forEach(ph => {
         const img = document.createElement('img');
         img.className = 'event-photo';
         img.alt = '现场照片';
         img.loading = 'lazy';
         strip.appendChild(img);
-        PhotoDB.get(id).then(blob => {
+        loadPhotoBlob(ph).then(blob => {
           if (blob) {
             const url = URL.createObjectURL(blob);
             img.src = url;
@@ -376,10 +461,10 @@ function eventItem(e) {
           }
         }).catch(() => {});
       });
-      if (rec.photoIds.length > shown.length) {
+      if (photos.length > shown.length) {
         const more = document.createElement('div');
         more.className = 'event-photo-more';
-        more.innerHTML = '<span class="cam">📷</span>还有' + (rec.photoIds.length - shown.length) + '张';
+        more.innerHTML = '<span class="cam">📷</span>还有' + (photos.length - shown.length) + '张';
         strip.appendChild(more);
       }
       item.appendChild(strip);
@@ -861,14 +946,20 @@ function handleDelete() {
   const e = shifts.find(x => x.id === editingId);
   if (e) { e.deleted = true; e.updatedAt = Date.now(); }
 
-  // 连带处理演出记录：记录同样打墓碑同步删除；本机照片从 IndexedDB 清掉
+  // 连带处理演出记录：记录同样打墓碑同步删除；本机照片从 IndexedDB 清掉，云端照片一并删除
   const rec = getRecord(e.date, e.slot);
   if (rec) {
     rec.deleted = true;
     rec.updatedAt = Date.now();
-    if (rec.photoIds && rec.photoIds.length) {
-      rec.photoIds.forEach(id => { PhotoDB.remove(id).catch(() => {}); });
-      rec.photoIds = [];
+    const photos = recPhotos(rec);
+    if (photos.length) {
+      photos.forEach(ph => {
+        if (ph.id) PhotoDB.remove(ph.id).catch(() => {});
+        if (ph.path && window.PhotoCloud && PhotoCloud.configured()) {
+          PhotoCloud.remove(ph.path).catch(() => {});
+        }
+      });
+      rec.photos = [];
     }
     saveRecords();
   }
@@ -888,7 +979,7 @@ let recordUrls = [];                      // 面板里创建的 objectURL（关�
 function ctxRecord() {
   if (!records[recordCtx.date]) records[recordCtx.date] = {};
   if (!records[recordCtx.date][recordCtx.slot]) {
-    records[recordCtx.date][recordCtx.slot] = { songs: [], note: '', photoIds: [], photoCount: 0, updatedAt: 0 };
+    records[recordCtx.date][recordCtx.slot] = { songs: [], note: '', photos: [], photoCount: 0, updatedAt: 0 };
   }
   return records[recordCtx.date][recordCtx.slot];
 }
@@ -933,21 +1024,30 @@ function renderPhotoGrid() {
   const grid = document.getElementById('photoGrid');
   grid.innerHTML = '';
   const rec = getRecord(recordCtx.date, recordCtx.slot);
-  const ids = (rec && rec.photoIds) || [];
+  const photos = recPhotos(rec);
 
-  document.getElementById('photoCountLabel').textContent = ids.length + ' / 9 张';
+  document.getElementById('photoCountLabel').textContent = photos.length + ' / 9 张';
 
-  ids.forEach((id, idx) => {
+  photos.forEach((ph, idx) => {
     const cell = document.createElement('div');
     cell.className = 'photo-cell';
     const img = document.createElement('img');
     img.alt = '现场照片';
     cell.appendChild(img);
 
+    // 待上传角标（本机新增、还没传到云端）
+    if (!ph.path && window.PhotoCloud && PhotoCloud.configured()) {
+      const flag = document.createElement('span');
+      flag.className = 'photo-upload-flag';
+      flag.textContent = '⇡';
+      flag.title = '待上传到云端';
+      cell.appendChild(flag);
+    }
+
     // 点击 → 全屏查看
     cell.addEventListener('click', (ev) => {
       if (ev.target.closest('.photo-del')) return; // 点删除不触发查看
-      PhotoDB.get(id).then(blob => {
+      loadPhotoBlob(ph).then(blob => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
         const viewerImg = document.getElementById('photoViewerImg');
@@ -968,7 +1068,7 @@ function renderPhotoGrid() {
     cell.appendChild(del);
 
     grid.appendChild(cell);
-    PhotoDB.get(id).then(blob => {
+    loadPhotoBlob(ph).then(blob => {
       if (blob) {
         const url = URL.createObjectURL(blob);
         recordUrls.push(url);
@@ -978,7 +1078,7 @@ function renderPhotoGrid() {
   });
 
   // 「＋ 添加」格（最多 9 张）
-  if (ids.length < 9) {
+  if (photos.length < 9) {
     const add = document.createElement('button');
     add.className = 'photo-add';
     add.innerHTML = '<span class="plus">＋</span>添加';
@@ -988,32 +1088,37 @@ function renderPhotoGrid() {
     grid.appendChild(add);
   }
 
-  // 另一台设备的照片提示
-  const remote = rec && (rec.photoCount || 0) > ids.length ? (rec.photoCount - ids.length) : 0;
+  // 未绑定照片云备份时，另一台设备的照片只能在那台设备上看到
+  const cloudOn = window.PhotoCloud && PhotoCloud.configured();
+  const remote = (!cloudOn && rec && (rec.photoCount || 0) > photos.length) ? (rec.photoCount - photos.length) : 0;
   if (remote > 0) {
     const tip = document.createElement('div');
     tip.className = 'photo-remote-tip';
-    tip.textContent = '另有 ' + remote + ' 张照片保存在添加它的那台设备上（照片不上云）';
+    tip.textContent = '另有 ' + remote + ' 张照片保存在添加它的那台设备上（绑定照片云备份后两台设备都能看）';
     grid.appendChild(tip);
   }
 }
 
-// 删除一张照片（本机 IndexedDB + 记录同步更新）
+// 删除一张照片（本机 IndexedDB + 云端文件 + 记录同步更新）
 function removePhotoAt(idx) {
   const rec = getRecord(recordCtx.date, recordCtx.slot);
-  if (!rec || !rec.photoIds || idx < 0 || idx >= rec.photoIds.length) return;
-  const id = rec.photoIds[idx];
-  rec.photoIds.splice(idx, 1);
+  const photos = recPhotos(rec);
+  if (!rec || idx < 0 || idx >= photos.length) return;
+  const ph = photos[idx];
+  photos.splice(idx, 1);
   rec.updatedAt = Date.now();
-  PhotoDB.remove(id).catch(() => {});
+  if (ph.id) PhotoDB.remove(ph.id).catch(() => {});
+  if (ph.path && window.PhotoCloud && PhotoCloud.configured()) {
+    PhotoCloud.remove(ph.path).catch(() => {}); // 删除云端文件，不留垃圾
+  }
   saveRecords();
   renderPhotoGrid();
 }
 
-// 选中照片文件 → 压缩 → IndexedDB
+// 选中照片文件 → 压缩 → IndexedDB → 触发云上传
 async function handlePhotoFiles(files) {
   const rec = ctxRecord();
-  const remain = 9 - ((rec.photoIds && rec.photoIds.length) || 0);
+  const remain = 9 - recPhotos(rec).length;
   if (remain <= 0) { toast('每场最多 9 张照片'); return; }
 
   const list = Array.from(files).slice(0, remain);
@@ -1025,7 +1130,7 @@ async function handlePhotoFiles(files) {
       const blob = await PhotoDB.compress(file);
       const id = PhotoDB.newId();
       await PhotoDB.add(id, blob);
-      rec.photoIds.push(id);
+      recPhotos(rec).push({ id: id, path: '' }); // path 空 = 待上传
       added++;
     } catch (err) { /* 单张失败跳过 */ }
   }
@@ -1034,7 +1139,12 @@ async function handlePhotoFiles(files) {
     rec.updatedAt = Date.now();
     saveRecords();
     renderPhotoGrid();
-    toast('已保存 ' + added + ' 张照片 ✓');
+    if (window.PhotoCloud && PhotoCloud.configured()) {
+      toast('已保存 ' + added + ' 张，正在上传云端…');
+      uploadPendingPhotos(); // 后台上传，不阻塞界面
+    } else {
+      toast('已保存 ' + added + ' 张照片 ✓（未绑定照片云备份，仅本机可见）');
+    }
   } else {
     toast('照片保存失败，请重试');
   }
@@ -1115,6 +1225,7 @@ function openSettings() {
   renderChips('store');
   renderChips('time');
   if (window.Sync) Sync.renderSyncUI(); // 刷新多设备同步区域
+  if (window.PhotoCloud) PhotoCloud.renderUI(); // 刷新照片云备份区域
   document.getElementById('settingsMask').classList.add('show');
 }
 
@@ -1447,6 +1558,12 @@ const importedCount = importSeedShifts();
 renderAll();
 if (remindOn) startRemindLoop();
 // 云同步由 sync.js 自行启动（它在本文件之后加载）
+
+// 照片云备份：启动时补传待上传照片；网络恢复时再试
+setTimeout(() => { if (window.uploadPendingPhotos) uploadPendingPhotos(); }, 2500);
+window.addEventListener('online', () => {
+  if (window.uploadPendingPhotos) setTimeout(uploadPendingPhotos, 1500);
+});
 
 // 导入完成提示（等页面渲染完再显示，避免被其他 toast 覆盖）
 if (importedCount > 0) {

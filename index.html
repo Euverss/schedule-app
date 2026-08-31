@@ -207,6 +207,13 @@
         </div>
       </div>
 
+      <div class="field">
+        <span>照片云备份（两台设备都能看照片）</span>
+        <div id="photoBox">
+          <!-- 照片云备份状态与 Token 绑定由 photo-cloud.js 生成 -->
+        </div>
+      </div>
+
       <div class="modal-btns">
         <button class="btn btn-cancel" id="settingsReset">恢复默认</button>
         <div class="spacer"></div>
@@ -260,6 +267,8 @@
   <script src="seed-august.js"></script>
   <!-- 照片本地存储（IndexedDB），须在 app.js 之前 -->
   <script src="records-db.js"></script>
+  <!-- 照片云备份（GitHub 私有仓库），须在 app.js 之前 -->
+  <script src="photo-cloud.js"></script>
   <!-- 引入业务逻辑 -->
   <script src="app.js"></script>
   <!-- 引入压缩库（云端数据压缩，须在 sync.js 之前） -->

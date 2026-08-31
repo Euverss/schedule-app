@@ -86,7 +86,8 @@ function buildPayload() {
   };
 }
 
-// 演出记录打包：剥离 photoIds（照片仅本机），photoCount 记录本机真实张数
+// 演出记录打包：同步 photos 里已上传的云端路径（照片本体存 GitHub 私有仓库）；
+// photoCount 兼容老版本（仅本机张数标记）
 function buildRecordsPayload() {
   const out = {};
   Object.keys(records).forEach(date => {
@@ -96,10 +97,14 @@ function buildRecordsPayload() {
       const r = day[slot];
       if (!r) return;
       if (!out[date]) out[date] = {};
+      const photos = (typeof recPhotos === 'function' ? recPhotos(r) : (Array.isArray(r.photos) ? r.photos : []));
       out[date][slot] = {
         songs: Array.isArray(r.songs) ? r.songs : [],
         note: r.note || '',
-        photoCount: (r.photoIds && r.photoIds.length) || 0,
+        photos: photos
+          .filter(p => p && p.path)
+          .map(p => ({ path: p.path })), // 只同步云端路径，id 是本机 IndexedDB 键不上云
+        photoCount: photos.length,
         deleted: !!r.deleted,
         updatedAt: r.updatedAt || 0
       };
@@ -202,8 +207,8 @@ function mergeRemoteData(remote) {
   }
 
   // 5) 演出记录合并：文字部分（歌单/备注）按 updatedAt 新者胜出；
-  //    photoIds 始终保留本机（照片本体不同步），云端只取 photoCount 标记；
-  //    云端墓碑 → 本机记录同步删除（本机照片一并清理）
+  //    照片：云端以 path 列表为准（照片本体在 GitHub 私有仓库），
+  //    本机待上传项（path 为空）保留，云端已删除的清理本机缓存
   const recordsChanged = mergeRemoteRecords(remote.records);
 
   if (changed || settingsChanged || recordsChanged) {
@@ -220,6 +225,34 @@ function mergeRemoteData(remote) {
     toast('已从云端同步最新数据 ✓');
   }
   return changed || settingsChanged || recordsChanged;
+}
+
+// 照片列表合并：云端较新时调用
+//   云端 path 列表为准 + 本机待上传项（path 为空）保留 +
+//   云端已删除的（本机有缓存 id）顺手清掉 IndexedDB 里的孤儿照片
+function mergePhotoList(local, rr) {
+  const old = (typeof recPhotos === 'function') ? recPhotos(local) : (Array.isArray(local.photos) ? local.photos : []);
+  const cloud = (Array.isArray(rr.photos) ? rr.photos : [])
+    .filter(p => p && p.path)
+    .map(p => ({ path: p.path }));
+
+  const cloudPaths = new Set(cloud.map(p => p.path));
+  const idByPath = new Map();
+  old.forEach(p => { if (p && p.path && p.id) idByPath.set(p.path, p.id); });
+
+  // 云端已删除 → 清理本机缓存
+  old.forEach(p => {
+    if (p && p.id && p.path && !cloudPaths.has(p.path)) {
+      PhotoDB.remove(p.id).catch(() => {});
+    }
+  });
+
+  // 合并：云端列表（尽量带回本机缓存 id）+ 本机待上传项
+  const merged = cloud.map(p => ({ id: idByPath.get(p.path) || '', path: p.path }));
+  old.forEach(p => {
+    if (p && p.id && !p.path) merged.push({ id: p.id, path: '' }); // 待上传，保留
+  });
+  return merged;
 }
 
 // 演出记录合并（返回 true 表示本地记录发生变化）
@@ -239,30 +272,35 @@ function mergeRemoteRecords(remoteRecords) {
 
       const local = records[date] && records[date][slot];
       if (!local) {
-        // 本机没有 → 直接采用云端记录（本机无照片）
+        // 本机没有 → 直接采用云端记录（photos 只带云端路径，本机按需拉取）
         if (!records[date]) records[date] = {};
         records[date][slot] = {
           songs: Array.isArray(rr.songs) ? rr.songs : [],
           note: rr.note || '',
-          photoIds: [],
+          photos: (Array.isArray(rr.photos) ? rr.photos : [])
+            .filter(p => p && p.path)
+            .map(p => ({ id: '', path: p.path })),
           photoCount: rr.photoCount || 0,
           deleted: !!rr.deleted,
           updatedAt: rr.updatedAt || 0
         };
         localChanged = true;
       } else if ((rr.updatedAt || 0) > (local.updatedAt || 0)) {
-        // 云端较新 → 采用云端的文字部分；photoIds 保留本机
+        // 云端较新 → 文字部分采用云端；照片按云端 path 列表合并
         local.songs = Array.isArray(rr.songs) ? rr.songs : [];
         local.note = rr.note || '';
         local.photoCount = rr.photoCount || 0;
         local.deleted = !!rr.deleted;
         local.updatedAt = rr.updatedAt || 0;
+        local.photos = mergePhotoList(local, rr);
         localChanged = true;
 
-        // 云端删除（墓碑）→ 本机照片也清理
-        if (local.deleted && local.photoIds && local.photoIds.length) {
-          local.photoIds.forEach(id => { PhotoDB.remove(id).catch(() => {}); });
-          local.photoIds = [];
+        // 云端删除（墓碑）→ 本机照片（含缓存）也清理
+        if (local.deleted && local.photos && local.photos.length) {
+          local.photos.forEach(ph => {
+            if (ph.id) PhotoDB.remove(ph.id).catch(() => {});
+          });
+          local.photos = [];
         }
       }
     });

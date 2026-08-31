@@ -1375,6 +1375,23 @@ body {
 
 .photo-del:active { transform: scale(0.9); }
 
+/* 「⇡ 待上传」角标（本机新增、还没传到云端） */
+.photo-upload-flag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgba(196, 136, 90, 0.9);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none; /* 不挡照片点击 */
+}
+
 /* 「＋ 添加」虚线格 */
 .photo-add {
   aspect-ratio: 1;
