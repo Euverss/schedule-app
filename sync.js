@@ -20,6 +20,7 @@
 const GIST_API  = 'https://api.github.com';
 const GIST_MARK = 'schedule-app-sync';       // Gist 描述里的识别标记
 const GIST_FILE = 'schedule-data.json';      // Gist 内的数据文件名
+const LZ_MARK   = 'LZ4:';                    // 压缩数据前缀（LZ-String Base64）
 
 const SYNC_TOKEN_KEY = 'schedule.syncToken';
 const SYNC_GIST_KEY  = 'schedule.syncGistId';
@@ -105,6 +106,39 @@ function buildRecordsPayload() {
     });
   });
   return out;
+}
+
+/* ---------- 内部：云端内容压缩（缓解 Gist 单文件 1MB 上限） ---------- */
+
+const hasLZ = () => typeof LZString !== 'undefined' && typeof LZString.compressToBase64 === 'function';
+
+// 全量数据 → 云端文件内容：优先 LZ-String Base64 压缩（等效空间放大 5-10 倍），
+// 压缩失败或库缺失时退回明文 JSON，保证永不阻塞同步
+function encodePayload() {
+  const raw = JSON.stringify(buildPayload());
+  if (!hasLZ()) return raw;
+  try {
+    return LZ_MARK + LZString.compressToBase64(raw);
+  } catch (e) {
+    return raw;
+  }
+}
+
+// 云端文件内容 → 明文 JSON 字符串：识别 LZ4: 前缀自动解压；
+// 兼容老版本明文数据；解压结果须通过 JSON 校验（防损坏数据吐出垃圾串），
+// 失败时按明文返回，后续推送会覆盖修复
+function decodeContent(content) {
+  if (!content) return '';
+  if (content.indexOf(LZ_MARK) === 0 && hasLZ()) {
+    try {
+      const dec = LZString.decompressFromBase64(content.slice(LZ_MARK.length));
+      if (dec) {
+        JSON.parse(dec); // 校验：损坏的压缩串可能解出非 JSON 垃圾
+        return dec;
+      }
+    } catch (e) { /* 解压/校验失败 → 按明文处理 */ }
+  }
+  return content;
 }
 
 // 把云端数据合并进本地。返回 true 表示本地数据发生了变化。
@@ -260,7 +294,7 @@ async function doPull() {
       const created = await gistApi('POST', '/gists', {
         description: GIST_MARK + '-' + settings.singer,
         public: false,
-        files: { [GIST_FILE]: { content: JSON.stringify(buildPayload()) } }
+        files: { [GIST_FILE]: { content: encodePayload() } }
       });
       syncGistId = created.id;
       localStorage.setItem(SYNC_GIST_KEY, syncGistId);
@@ -279,6 +313,7 @@ async function doPull() {
     });
     content = await r.text();
   }
+  content = decodeContent(content); // 识别 LZ4: 压缩前缀自动解压（兼容明文老数据）
   let remote = null;
   try { remote = JSON.parse(content); } catch (e) { /* 数据损坏 → 忽略，推送时会覆盖修复 */ }
   if (remote) mergeRemoteData(remote);
@@ -288,7 +323,7 @@ async function doPush() {
   if (!syncGistId) throw new Error('未绑定');
   await gistApi('PATCH', '/gists/' + syncGistId, {
     description: GIST_MARK + '-' + settings.singer,
-    files: { [GIST_FILE]: { content: JSON.stringify(buildPayload()) } }
+    files: { [GIST_FILE]: { content: encodePayload() } }
   });
 }
 
@@ -447,7 +482,7 @@ async function bindToken(token) {
       const created = await gistApi('POST', '/gists', {
         description: GIST_MARK + '-' + settings.singer,
         public: false,
-        files: { [GIST_FILE]: { content: JSON.stringify(buildPayload()) } }
+        files: { [GIST_FILE]: { content: encodePayload() } }
       });
       syncGistId = created.id;
       localStorage.setItem(SYNC_GIST_KEY, syncGistId);
