@@ -1392,6 +1392,25 @@ body {
   pointer-events: none; /* 不挡照片点击 */
 }
 
+/* 「☁ 加载不出」占位（未绑定照片云 / 网络断） */
+.photo-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #C9BBB0;
+}
+
+.event-photo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #C9BBB0;
+}
+
 /* 「＋ 添加」虚线格 */
 .photo-add {
   aspect-ratio: 1;

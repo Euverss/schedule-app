@@ -23,7 +23,6 @@ const PhotoCloud = (() => {
   const REPO_NAME = 'schedule-photos';
   const BRANCH = 'main';
   const API = 'https://api.github.com';
-  const RAW = 'https://raw.githubusercontent.com';
 
   let token = localStorage.getItem(PHOTO_TOKEN_KEY) || '';
   let repo  = localStorage.getItem(PHOTO_REPO_KEY)  || '';
@@ -76,10 +75,17 @@ const PhotoCloud = (() => {
   }
 
   // 从云端拉取一张照片 → Blob（失败返回 null）
+  // 注意：必须走 api.github.com Contents API（raw 模式），不能走
+  // raw.githubusercontent.com —— 后者对带 Authorization 头的跨域预检
+  // 请求（OPTIONS）返回 403 且无 Access-Control-Allow-Headers，
+  // 浏览器里 fetch 会直接失败；api.github.com 完整支持 CORS。
   async function fetchBlob(path) {
     try {
-      const resp = await fetch(RAW + '/' + repo + '/' + BRANCH + '/' + path, {
-        headers: { 'Authorization': 'Bearer ' + token }
+      const resp = await fetch(API + '/repos/' + repo + '/contents/' + path, {
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Accept': 'application/vnd.github.raw+json' // 直接返回原始字节
+        }
       });
       if (!resp.ok) return null;
       return resp.blob();

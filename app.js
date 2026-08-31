@@ -458,6 +458,13 @@ function eventItem(e) {
             const url = URL.createObjectURL(blob);
             img.src = url;
             img.onload = () => URL.revokeObjectURL(url); // 加载完释放，下次从 IndexedDB 再取
+          } else {
+            // 拉不到（未绑定照片云 / 网络断）→ 云朵占位，不留裂图
+            img.remove();
+            const empty = document.createElement('div');
+            empty.className = 'event-photo event-photo-empty';
+            empty.textContent = '☁';
+            strip.appendChild(empty);
           }
         }).catch(() => {});
       });
@@ -1073,6 +1080,14 @@ function renderPhotoGrid() {
         const url = URL.createObjectURL(blob);
         recordUrls.push(url);
         img.src = url;
+      } else {
+        // 拉不到（未绑定照片云 / 网络断）→ 云朵占位，不留裂图
+        img.remove();
+        const empty = document.createElement('span');
+        empty.className = 'photo-empty';
+        empty.textContent = '☁';
+        empty.title = (window.PhotoCloud && PhotoCloud.configured()) ? '点击重试 / 网络恢复后自动加载' : '绑定照片云备份后可查看（设置里绑定）';
+        cell.insertBefore(empty, cell.firstChild);
       }
     }).catch(() => {});
   });
