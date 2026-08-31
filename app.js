@@ -209,10 +209,12 @@ function renderCalendar() {
     }
   });
 
-  // 上个月补位
+  // 上个月补位（本地拼接，避免 toISOString 的 UTC 时区偏移）
+  const prevY = viewMonth === 0 ? viewYear - 1 : viewYear;
+  const prevM = viewMonth === 0 ? 11 : viewMonth - 1;
   for (let i = firstDay - 1; i >= 0; i--) {
     const d = prevMonthDays - i;
-    const dateStr = new Date(viewYear, viewMonth - 1, d).toISOString().slice(0, 10);
+    const dateStr = prevY + '-' + pad(prevM + 1) + '-' + pad(d);
     grid.appendChild(dayCell(dateStr, true, 0, dotColor, recordDays[dateStr]));
   }
 
@@ -222,11 +224,13 @@ function renderCalendar() {
     grid.appendChild(dayCell(dateStr, false, countMap[d] || 0, dotColor, recordDays[dateStr]));
   }
 
-  // 下个月补位
+  // 下个月补位（本地拼接，避免 toISOString 的 UTC 时区偏移）
   const nextCount = 7 - (grid.children.length % 7);
   if (nextCount < 7) {
+    const nextY = viewMonth === 11 ? viewYear + 1 : viewYear;
+    const nextM = viewMonth === 11 ? 0 : viewMonth + 1;
     for (let d = 1; d <= nextCount; d++) {
-      const dateStr = new Date(viewYear, viewMonth + 1, d).toISOString().slice(0, 10);
+      const dateStr = nextY + '-' + pad(nextM + 1) + '-' + pad(d);
       grid.appendChild(dayCell(dateStr, true, 0, dotColor, recordDays[dateStr]));
     }
   }
