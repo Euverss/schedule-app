@@ -686,22 +686,39 @@ function renderStoreDates() {
 
 /* ---------- 6. 统计面板 ---------- */
 
-// 统计时段：all 全月 | p1 1-10日 | p2 11-25日
+// 统计时段（结算周期）：all 全月 | p1 上月26日-本月10日 | p2 本月11日-25日
 let statPeriod = 'all';
 const STAT_PERIODS = {
-  all: { label: '本月',  empty: '本月暂无登记，快去添加场次吧', range: null },
-  p1:  { label: '1-10日', empty: '1-10日 暂无登记', range: [1, 10] },
-  p2:  { label: '11-25日', empty: '11-25日 暂无登记', range: [11, 25] }
+  all: { label: '本月',      empty: '本月暂无登记，快去添加场次吧',       tab: '全月' },
+  p1:  { label: '26日-10日', empty: '上月26日 至 本月10日 暂无登记',     tab: '26日-10日' },
+  p2:  { label: '11日-25日', empty: '11日 至 25日 暂无登记',             tab: '11日-25日' }
 };
 
-// 当前时段的场次（在 monthShifts 基础上按日期号数过滤）
+// 当前时段的场次：
+//   p1 = 上月26日 ～ 本月10日（跨月，从全量 shifts 里筛）
+//   p2 = 本月11日 ～ 25日
 function periodShifts() {
-  const ms = monthShifts();
-  const p = STAT_PERIODS[statPeriod];
-  if (!p || !p.range) return ms;
-  return ms.filter(s => {
-    const day = parseInt(s.date.slice(8), 10) || 0;
-    return day >= p.range[0] && day <= p.range[1];
+  if (statPeriod === 'all') return monthShifts();
+
+  const py = viewMonth === 0 ? viewYear - 1 : viewYear;
+  const pm = viewMonth === 0 ? 11 : viewMonth - 1;
+  const prevPrefix = py + '-' + pad(pm + 1) + '-';
+  const curPrefix = viewMonthKey() + '-';
+  const dayOf = (d) => parseInt(d.slice(8), 10) || 0;
+
+  if (statPeriod === 'p1') {
+    // 上月26日～月末 + 本月1日～10日
+    return shifts.filter(s => {
+      if (s.deleted) return false;
+      if (s.date.startsWith(prevPrefix)) return dayOf(s.date) >= 26;
+      if (s.date.startsWith(curPrefix))  return dayOf(s.date) <= 10;
+      return false;
+    });
+  }
+  // p2：本月11日～25日
+  return monthShifts().filter(s => {
+    const d = dayOf(s.date);
+    return d >= 11 && d <= 25;
   });
 }
 
