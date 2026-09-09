@@ -686,12 +686,33 @@ function renderStoreDates() {
 
 /* ---------- 6. 统计面板 ---------- */
 
-function renderStats() {
+// 统计时段：all 全月 | p1 1-10日 | p2 11-25日
+let statPeriod = 'all';
+const STAT_PERIODS = {
+  all: { label: '本月',  empty: '本月暂无登记，快去添加场次吧', range: null },
+  p1:  { label: '1-10日', empty: '1-10日 暂无登记', range: [1, 10] },
+  p2:  { label: '11-25日', empty: '11-25日 暂无登记', range: [11, 25] }
+};
+
+// 当前时段的场次（在 monthShifts 基础上按日期号数过滤）
+function periodShifts() {
   const ms = monthShifts();
+  const p = STAT_PERIODS[statPeriod];
+  if (!p || !p.range) return ms;
+  return ms.filter(s => {
+    const day = parseInt(s.date.slice(8), 10) || 0;
+    return day >= p.range[0] && day <= p.range[1];
+  });
+}
+
+function renderStats() {
+  const p = STAT_PERIODS[statPeriod] || STAT_PERIODS.all;
+  const ms = periodShifts();
   const total = ms.length;
 
-  // Hero 大数字（场次总数）
+  // Hero 大数字（场次总数）+ 标签跟随时段
   document.getElementById('statTotal').textContent = total;
+  document.getElementById('statHeroLabel').textContent = p.label + '总场次';
 
   // 环形图与中心数字
   const donut = document.getElementById('statDonut');
@@ -704,7 +725,7 @@ function renderStats() {
     donut.style.background = 'var(--line)';
     const empty = document.createElement('div');
     empty.className = 'stat-empty';
-    empty.textContent = '本月暂无登记，快去添加场次吧';
+    empty.textContent = p.empty;
     grid.appendChild(empty);
     return;
   }
@@ -1517,6 +1538,17 @@ document.getElementById('timeInput').addEventListener('keydown', (e) => { if (e.
 
 // 导出本月排班（按钮已在 HTML 中内置）
 document.getElementById('exportBtn').addEventListener('click', exportMonth);
+
+// 统计时段切换（全月 / 1-10日 / 11-25日）
+document.querySelectorAll('#statPeriodTabs .stat-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    statPeriod = btn.dataset.period || 'all';
+    document.querySelectorAll('#statPeriodTabs .stat-tab').forEach(b => {
+      b.classList.toggle('active', b === btn);
+    });
+    renderStats();
+  });
+});
 
 // 提醒开关
 document.getElementById('remindToggle').addEventListener('click', toggleRemind);

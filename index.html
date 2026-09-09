@@ -87,11 +87,18 @@
         <button class="btn btn-export" id="exportBtn" aria-label="导出CSV">导出 CSV</button>
       </div>
 
+      <!-- 统计时段切换：全月 / 1-10日 / 11-25日 -->
+      <div class="stat-tabs" id="statPeriodTabs">
+        <button class="stat-tab active" data-period="all">全月</button>
+        <button class="stat-tab" data-period="p1">1-10日</button>
+        <button class="stat-tab" data-period="p2">11-25日</button>
+      </div>
+
       <!-- 大数字 + 环形图 -->
       <div class="stat-hero">
         <div class="stat-hero-num">
           <div class="stat-hero-big" id="statTotal">0</div>
-          <div class="stat-hero-label">本月总场次</div>
+          <div class="stat-hero-label" id="statHeroLabel">本月总场次</div>
         </div>
         <div class="stat-donut-wrap">
           <div class="stat-donut" id="statDonut"></div>

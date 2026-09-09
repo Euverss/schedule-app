@@ -771,6 +771,37 @@ body {
   color: #fff;
 }
 
+/* 统计时段切换（全月 / 1-10日 / 11-25日） */
+.stat-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.stat-tab {
+  flex: 1;
+  border: 1.5px solid rgba(232, 92, 43, 0.25);
+  background: #fff;
+  color: var(--text-sub);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-tab:active {
+  transform: scale(0.97);
+}
+
+.stat-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 /* Hero：大数字 + 环形图 */
 .stat-hero {
   display: flex;

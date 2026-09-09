@@ -4,7 +4,7 @@
    之后即使没有网络也能正常打开使用。
    ========================================================= */
 
-const CACHE_NAME = 'schedule-app-v14';
+const CACHE_NAME = 'schedule-app-v15';
 // 需要缓存的文件（相对路径）
 const ASSETS = [
   './',
