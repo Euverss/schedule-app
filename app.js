@@ -2,7 +2,7 @@
    哲恒 排班登记 - 核心逻辑
    参照《哲恒排班登记模版（日期列）.xlsx》设计：
    - 12 个月循环查看，每年一个周期
-   - 每天最多 3 场（场次 1/2/3）
+   - 每天最多 4 场（场次 1/2/3/4）
    - 每场登记：门店 + 时间段 + 备注
    - 右侧自动统计：总场次及各门店场次
    数据保存在浏览器本地 (localStorage)
@@ -32,7 +32,7 @@ let settings = Object.assign(
   safeParse(localStorage.getItem(SETTINGS_KEY))
 );
 
-// 所有场次：{ id, date:"YYYY-MM-DD", slot:1|2|3, store, time, note }
+// 所有场次：{ id, date:"YYYY-MM-DD", slot:1|2|3|4, store, time, note }
 let shifts = safeParse(localStorage.getItem(SHIFTS_KEY)) || [];
 
 // 演出记录：{ "YYYY-MM-DD": { 1: { songs:[], note:"", photos:[{id,path}], updatedAt } } }
@@ -344,8 +344,8 @@ function dayCell(dateStr, otherMonth, count, dotColor, hasRec) {
     cell.classList.add('has-event');
     const dots = document.createElement('span');
     dots.className = 'dots';
-    // 最多显示 3 个圆点
-    for (let i = 0; i < Math.min(count, 3); i++) {
+    // 最多显示 4 个圆点
+    for (let i = 0; i < Math.min(count, 4); i++) {
       const dot = document.createElement('span');
       dot.className = 'dot';
       if (dotColor) dot.style.background = dotColor; // 筛选门店时用门店色
@@ -376,11 +376,11 @@ function renderList() {
 
   const dayEvents = dayShifts(selectedDate).sort((a, b) => a.slot - b.slot);
   const list = document.getElementById('eventList');
-  document.getElementById('listCount').textContent = dayEvents.length + ' / 3 场';
+  document.getElementById('listCount').textContent = dayEvents.length + ' / 4 场';
   list.innerHTML = '';
 
-  // 按场次 1/2/3 展示
-  for (let slot = 1; slot <= 3; slot++) {
+  // 按场次 1/2/3/4 展示
+  for (let slot = 1; slot <= 4; slot++) {
     const e = dayEvents.find(x => x.slot === slot);
     if (e) {
       list.appendChild(eventItem(e));
@@ -389,11 +389,11 @@ function renderList() {
     }
   }
 
-  // 满 3 场提示
-  if (dayEvents.length >= 3) {
+  // 满 4 场提示
+  if (dayEvents.length >= 4) {
     const tip = document.createElement('div');
     tip.className = 'full-tip';
-    tip.textContent = '当天 3 场已满，多余场次请记在备注或另选日期';
+    tip.textContent = '当天 4 场已满，多余场次请记在备注或另选日期';
     list.appendChild(tip);
   }
 }
@@ -538,9 +538,9 @@ function emptySlot(slot) {
   btn.appendChild(txt);
 
   btn.addEventListener('click', () => {
-    // 检查当天是否已满 3 场
-    if (dayShifts(selectedDate).length >= 3) {
-      toast('当天 3 场已满，最多登记 3 场');
+    // 检查当天是否已满 4 场
+    if (dayShifts(selectedDate).length >= 4) {
+      toast('当天 4 场已满，最多登记 4 场');
       return;
     }
     openModal(null, slot);
@@ -860,11 +860,11 @@ function openModal(e, presetSlot) {
   document.getElementById('modalMask').classList.add('show');
 }
 
-// 下一个未占用的场次号；已满返回 3
+// 下一个未占用的场次号；已满返回 4
 function nextFreeSlot() {
   const used = new Set(dayShifts(selectedDate).map(x => x.slot));
-  for (let i = 1; i <= 3; i++) if (!used.has(i)) return i;
-  return 3;
+  for (let i = 1; i <= 4; i++) if (!used.has(i)) return i;
+  return 4;
 }
 
 function highlightSlot() {
@@ -962,9 +962,9 @@ function handleSave() {
     // 新增：检查当天该场次是否冲突（只算未删除的）
     const dup = shifts.find(x => !x.deleted && x.date === date && x.slot === currentSlot);
     if (dup) { toast('场次 ' + currentSlot + ' 当天已登记，请选择其他场次'); return; }
-    // 检查当天是否满 3 场
-    if (dayShifts(date).length >= 3) {
-      toast('当天 3 场已满，最多登记 3 场');
+    // 检查当天是否满 4 场
+    if (dayShifts(date).length >= 4) {
+      toast('当天 4 场已满，最多登记 4 场');
       return;
     }
     shifts.push({
@@ -1514,8 +1514,8 @@ document.getElementById('todayBtn').addEventListener('click', () => {
 
 // 添加场次（悬浮按钮）：跳到当天，若当天已满提示
 document.getElementById('addBtn').addEventListener('click', () => {
-  if (dayShifts(selectedDate).length >= 3) {
-    toast('当天 3 场已满，最多登记 3 场');
+  if (dayShifts(selectedDate).length >= 4) {
+    toast('当天 4 场已满，最多登记 4 场');
     return;
   }
   openModal(null);

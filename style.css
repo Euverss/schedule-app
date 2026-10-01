@@ -523,6 +523,7 @@ body {
 .slot-badge.slot-1 { background: var(--store-1); }
 .slot-badge.slot-2 { background: var(--store-2); }
 .slot-badge.slot-3 { background: var(--store-3); }
+.slot-badge.slot-4 { background: var(--store-4); }
 
 .event-main {
   flex: 1;
@@ -731,7 +732,7 @@ body {
   font-weight: 700;
 }
 
-/* 当天 3 场已满的提示 */
+/* 当天 4 场已满的提示 */
 .full-tip {
   grid-column: 1 / -1;
   font-size: 12px;
