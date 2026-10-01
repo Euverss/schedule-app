@@ -35,6 +35,36 @@ let settings = Object.assign(
 // 所有场次：{ id, date:"YYYY-MM-DD", slot:1|2|3|4, store, time, note }
 let shifts = safeParse(localStorage.getItem(SHIFTS_KEY)) || [];
 
+// 启动自愈：清理历史遗留的同"日期+场次"重复记录（保留 updatedAt 最新一条），
+// 以及门店名首尾空格（曾用自定义输入未 trim 的旧数据，会被统计当成另一家店）
+(function healShifts() {
+  let dirty = false;
+  // 1) 门店名 trim
+  shifts.forEach(s => {
+    if (s && typeof s.store === 'string' && s.store !== s.store.trim()) {
+      s.store = s.store.trim(); dirty = true;
+    }
+  });
+  // 2) 同 date+slot 去重：保留 updatedAt 最新一条；被淘汰的活记录打墓碑并保留
+  //    （墓碑留在数组里，云同步时才会把另一台设备上的重复记录也清掉）
+  const byKey = new Map();
+  const tombstones = [];
+  shifts.forEach(s => {
+    if (!s || !s.id || !s.date) { dirty = true; return; }
+    const key = s.date + '#' + s.slot;
+    const cur = byKey.get(key);
+    if (!cur) { byKey.set(key, s); return; }
+    const loser = (s.updatedAt || 0) > (cur.updatedAt || 0) ? cur : s;
+    const winner = loser === cur ? s : cur;
+    if (!loser.deleted) { loser.deleted = true; loser.updatedAt = Date.now(); tombstones.push(loser); }
+    byKey.set(key, winner);
+    dirty = true;
+  });
+  if (dirty) shifts = Array.from(byKey.values()).concat(tombstones);
+  // 3) 写回（有变化才写）
+  if (dirty) localStorage.setItem(SHIFTS_KEY, JSON.stringify(shifts));
+})();
+
 // 演出记录：{ "YYYY-MM-DD": { 1: { songs:[], note:"", photos:[{id,path}], updatedAt } } }
 // photos[].id = 本机 IndexedDB 里的照片 id（云端拉取的照片会静默回填）；photos[].path = 云端路径（空=待上传）
 let records = safeParse(localStorage.getItem(RECORDS_KEY)) || {};
@@ -945,6 +975,11 @@ function handleSave() {
     // 编辑
     const e = shifts.find(x => x.id === editingId);
     if (e) {
+      // 日期/场次变化时，检查目标位置是否被其他场次占用（防止产生同位重复记录）
+      if (e.date !== date || e.slot !== currentSlot) {
+        const clash = shifts.find(x => !x.deleted && x.id !== editingId && x.date === date && x.slot === currentSlot);
+        if (clash) { toast('该场次已被占用，请选择其他场次'); return; }
+      }
       // 日期/场次变化 → 演出记录跟着搬家（照片 id 不变，无需移动 IndexedDB）
       if ((e.date !== date || e.slot !== currentSlot) && getRecord(e.date, e.slot)) {
         const rec = getRecord(e.date, e.slot);
